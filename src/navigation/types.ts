@@ -7,6 +7,7 @@ export type RootStackParamList = {
   PhoneAuth: undefined;
   OtpVerification: { phoneNumber: string; confirmationId: string };
   MainTabs: NavigatorScreenParams<MainTabParamList>;
+  Chat: { groupId: string };
 };
 
 export type MainTabParamList = {

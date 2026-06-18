@@ -12,6 +12,8 @@ export const FIRESTORE_COLLECTIONS = {
     createdBy: 'string',
     members: 'string[]',
     createdAt: 'timestamp',
+    lastMessage: 'string',
+    lastMessageAt: 'timestamp',
   },
   messages: {
     id: 'string',

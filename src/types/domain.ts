@@ -18,6 +18,7 @@ export type CommunityGroup = {
   iconColor: string;
   iconBackground: string;
   lastMessage: string;
+  lastMessageAt?: Date;
   time: string;
   unread?: number;
 };

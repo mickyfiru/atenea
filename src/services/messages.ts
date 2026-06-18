@@ -1,0 +1,86 @@
+import {
+  addDoc,
+  collection,
+  doc,
+  onSnapshot,
+  query,
+  serverTimestamp,
+  updateDoc,
+  where,
+  type DocumentData,
+  type QueryDocumentSnapshot,
+  type Timestamp,
+  type Unsubscribe,
+} from 'firebase/firestore';
+
+import { Message } from '../types/domain';
+import { db } from './firebase';
+
+type FirestoreMessage = {
+  groupId: string;
+  userId: string;
+  text: string;
+  createdAt?: Timestamp;
+};
+
+function assertFirestore() {
+  if (!db) {
+    throw new Error('Firestore no esta configurado.');
+  }
+
+  return db;
+}
+
+function snapshotToMessage(snapshot: QueryDocumentSnapshot<DocumentData>): Message {
+  const data = snapshot.data() as FirestoreMessage;
+
+  return {
+    id: snapshot.id,
+    groupId: data.groupId,
+    userId: data.userId,
+    text: data.text,
+    createdAt: data.createdAt?.toDate() ?? new Date(),
+  };
+}
+
+export function subscribeGroupMessages(
+  groupId: string,
+  onMessages: (messages: Message[]) => void,
+  onError: (error: Error) => void,
+): Unsubscribe {
+  const firestore = assertFirestore();
+  const messagesQuery = query(collection(firestore, 'messages'), where('groupId', '==', groupId));
+
+  return onSnapshot(
+    messagesQuery,
+    (snapshot) => {
+      const messages = snapshot.docs
+        .map(snapshotToMessage)
+        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+      onMessages(messages);
+    },
+    onError,
+  );
+}
+
+export async function sendGroupMessage(groupId: string, userId: string, text: string) {
+  const firestore = assertFirestore();
+  const trimmedText = text.trim();
+
+  if (!trimmedText) {
+    return;
+  }
+
+  await addDoc(collection(firestore, 'messages'), {
+    groupId,
+    userId,
+    text: trimmedText,
+    createdAt: serverTimestamp(),
+  });
+
+  await updateDoc(doc(firestore, 'groups', groupId), {
+    lastMessage: trimmedText,
+    lastMessageAt: serverTimestamp(),
+  });
+}

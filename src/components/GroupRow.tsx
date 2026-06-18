@@ -6,12 +6,13 @@ import { CommunityGroup } from '../types/domain';
 
 type GroupRowProps = {
   group: CommunityGroup;
+  onPress?: () => void;
   showCall?: boolean;
 };
 
-export function GroupRow({ group, showCall }: GroupRowProps) {
+export function GroupRow({ group, onPress, showCall }: GroupRowProps) {
   return (
-    <Pressable style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
       <View style={[styles.icon, { backgroundColor: group.iconBackground }]}>
         <Ionicons
           name={group.icon as keyof typeof Ionicons.glyphMap}

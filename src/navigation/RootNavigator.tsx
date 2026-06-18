@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { useAuth } from '../context/AuthContext';
 import { AteneaScreen } from '../screens/AteneaScreen';
+import { ChatScreen } from '../screens/ChatScreen';
 import { GroupsScreen } from '../screens/GroupsScreen';
 import { OtpVerificationScreen } from '../screens/OtpVerificationScreen';
 import { PhoneAuthScreen } from '../screens/PhoneAuthScreen';
@@ -41,7 +42,10 @@ export function RootNavigator() {
         }}
       >
         {user ? (
-          <Stack.Screen name="MainTabs" component={MainTabs} />
+          <>
+            <Stack.Screen name="MainTabs" component={MainTabs} />
+            <Stack.Screen name="Chat" component={ChatScreen} />
+          </>
         ) : (
           <>
             <Stack.Screen name="Welcome" component={WelcomeScreen} />
