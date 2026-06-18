@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AlertComposerModal } from '../components/AlertComposerModal';
 import { GroupRow } from '../components/GroupRow';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { SectionCard } from '../components/SectionCard';
@@ -33,6 +34,7 @@ export function GroupsScreen() {
   const [modalMode, setModalMode] = useState<GroupModalMode>();
   const [inputValue, setInputValue] = useState('');
   const [saving, setSaving] = useState(false);
+  const [alertComposerVisible, setAlertComposerVisible] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -110,6 +112,12 @@ export function GroupsScreen() {
             <Text style={styles.subtitle}>River District community channels</Text>
           </View>
           <View style={styles.headerActions}>
+            <Pressable
+              onPress={() => setAlertComposerVisible(true)}
+              style={({ pressed }) => [styles.iconButton, styles.alertIconButton, pressed && styles.pressed]}
+            >
+              <Ionicons name="warning-outline" size={22} color={colors.danger} />
+            </Pressable>
             <Pressable
               onPress={() => setModalMode('join')}
               style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
@@ -203,6 +211,12 @@ export function GroupsScreen() {
           </View>
         </View>
       </Modal>
+      <AlertComposerModal
+        groups={groups}
+        onClose={() => setAlertComposerVisible(false)}
+        userId={user?.uid}
+        visible={alertComposerVisible}
+      />
     </SafeAreaView>
   );
 }
@@ -248,6 +262,9 @@ const styles = StyleSheet.create({
   },
   primaryIconButton: {
     backgroundColor: colors.primary,
+  },
+  alertIconButton: {
+    backgroundColor: colors.dangerSoft,
   },
   pressed: {
     opacity: 0.72,

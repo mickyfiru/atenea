@@ -117,14 +117,16 @@ export const mockAlerts: CommunityAlert[] = [
     category: 'Seguridad',
     title: 'Reportes cerca del parque central',
     description: 'Dos reportes de robo fueron ingresados hoy.',
+    soundType: 'Seguridad',
     createdAt: new Date(),
   },
   {
     id: 'traffic_1',
     groupId: 'neighbors',
-    category: 'Transito',
+    category: 'Tr\u00e1nsito',
     title: 'Accidente en avenida principal',
     description: 'Dos pistas bloqueadas, se recomienda ruta alternativa.',
+    soundType: 'Tr\u00e1nsito',
     createdAt: new Date(),
   },
   {
@@ -133,6 +135,7 @@ export const mockAlerts: CommunityAlert[] = [
     category: 'Comunidad',
     title: 'Actividad vecinal',
     description: 'Reunion comunitaria confirmada para esta semana.',
+    soundType: 'Comunidad',
     createdAt: new Date(),
   },
   {
@@ -141,6 +144,7 @@ export const mockAlerts: CommunityAlert[] = [
     category: 'Servicios',
     title: 'Mantencion programada',
     description: 'Revision de luminarias en River District.',
+    soundType: 'Servicios',
     createdAt: new Date(),
   },
 ];

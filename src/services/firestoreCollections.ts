@@ -25,11 +25,13 @@ export const FIRESTORE_COLLECTIONS = {
   alerts: {
     id: 'string',
     groupId: 'string',
-    category: 'Seguridad | Transito | Comunidad | Servicios',
+    userId: 'string',
+    category: 'Seguridad | Tr\u00e1nsito | Comunidad | Servicios',
     title: 'string',
     description: 'string',
+    soundType: 'Seguridad | Tr\u00e1nsito | Comunidad | Servicios',
     createdAt: 'timestamp',
   },
 } as const;
 
-export const ALERT_CATEGORIES = ['Seguridad', 'Transito', 'Comunidad', 'Servicios'] as const;
+export const ALERT_CATEGORIES = ['Seguridad', 'Tr\u00e1nsito', 'Comunidad', 'Servicios'] as const;

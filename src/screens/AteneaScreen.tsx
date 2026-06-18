@@ -1,11 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AlertComposerModal } from '../components/AlertComposerModal';
 import { AppHeader } from '../components/AppHeader';
 import { AteneaOrb } from '../components/AteneaOrb';
 import { QuickActionCard } from '../components/QuickActionCard';
 import { colors, radius } from '../constants/theme';
+import { useAuth } from '../context/AuthContext';
+import { subscribeUserGroups } from '../services/groups';
+import { AlertCategory, CommunityGroup } from '../types/domain';
 
 const suggestions = ['"What happened today?"', '"Call an ambulance"', '"Start recording"'];
 
@@ -16,6 +21,7 @@ const quickActions = [
     icon: 'warning-outline' as const,
     color: colors.danger,
     backgroundColor: colors.dangerSoft,
+    category: 'Seguridad' as AlertCategory,
   },
   {
     title: 'Incident',
@@ -23,6 +29,7 @@ const quickActions = [
     icon: 'alert-circle-outline' as const,
     color: colors.warning,
     backgroundColor: colors.warningSoft,
+    category: 'Comunidad' as AlertCategory,
   },
   {
     title: 'Call 911',
@@ -41,6 +48,19 @@ const quickActions = [
 ];
 
 export function AteneaScreen() {
+  const { user } = useAuth();
+  const [groups, setGroups] = useState<CommunityGroup[]>([]);
+  const [alertCategory, setAlertCategory] = useState<AlertCategory>('Seguridad');
+  const [alertComposerVisible, setAlertComposerVisible] = useState(false);
+
+  useEffect(() => {
+    if (!user) {
+      return undefined;
+    }
+
+    return subscribeUserGroups(user.uid, setGroups, () => undefined);
+  }, [user]);
+
   return (
     <SafeAreaView edges={['left', 'right']} style={styles.safe}>
       <AppHeader title="ATENEA" subtitle="Tue, Jun 17 - River District" aiBadge showBell />
@@ -74,7 +94,12 @@ export function AteneaScreen() {
                 icon={action.icon}
                 color={action.color}
                 backgroundColor={action.backgroundColor}
-                onPress={() => undefined}
+                onPress={() => {
+                  if (action.category) {
+                    setAlertCategory(action.category);
+                    setAlertComposerVisible(true);
+                  }
+                }}
               />
             ))}
           </View>
@@ -94,6 +119,13 @@ export function AteneaScreen() {
           <Ionicons name="paper-plane-outline" size={24} color={colors.background} />
         </View>
       </View>
+      <AlertComposerModal
+        groups={groups}
+        initialCategory={alertCategory}
+        onClose={() => setAlertComposerVisible(false)}
+        userId={user?.uid}
+        visible={alertComposerVisible}
+      />
     </SafeAreaView>
   );
 }

@@ -8,6 +8,8 @@ export type RootStackParamList = {
   OtpVerification: { phoneNumber: string; confirmationId: string };
   MainTabs: NavigatorScreenParams<MainTabParamList>;
   Chat: { groupId: string };
+  Alerts: { initialCategory?: string } | undefined;
+  SoundSettings: undefined;
 };
 
 export type MainTabParamList = {

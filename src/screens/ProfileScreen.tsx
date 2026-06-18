@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { NavigationProp, useNavigation } from '@react-navigation/native';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -7,8 +8,10 @@ import { SectionCard } from '../components/SectionCard';
 import { colors, radius } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 import { mockUser } from '../data/mockData';
+import { RootStackParamList } from '../navigation/types';
 
 export function ProfileScreen() {
+  const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const { user } = useAuth();
   const phoneNumber = user?.phoneNumber ?? mockUser.phoneNumber;
 
@@ -44,7 +47,8 @@ export function ProfileScreen() {
             iconBackground={colors.warningSoft}
             iconColor={colors.warning}
             label="Historial"
-            value="28 alertas"
+            onPress={() => navigation.navigate('Alerts')}
+            value="Alertas"
           />
           <View style={styles.separator} />
           <ProfileOptionRow
@@ -52,7 +56,8 @@ export function ProfileScreen() {
             iconBackground={colors.primarySoft}
             iconColor={colors.primary}
             label="Revisar alertas"
-            value="Pendientes"
+            onPress={() => navigation.navigate('Alerts')}
+            value="Abrir"
           />
         </SectionCard>
 
@@ -69,8 +74,9 @@ export function ProfileScreen() {
             icon="volume-medium-outline"
             iconBackground={colors.violetSoft}
             iconColor={colors.violet}
-            label="Configuracion de sonidos"
-            value="4 categorias"
+            label="Sonidos de alertas"
+            onPress={() => navigation.navigate('SoundSettings')}
+            value="Configurar"
           />
           <View style={styles.separator} />
           <ProfileOptionRow

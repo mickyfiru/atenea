@@ -3,12 +3,14 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { useAuth } from '../context/AuthContext';
+import { AlertsScreen } from '../screens/AlertsScreen';
 import { AteneaScreen } from '../screens/AteneaScreen';
 import { ChatScreen } from '../screens/ChatScreen';
 import { GroupsScreen } from '../screens/GroupsScreen';
 import { OtpVerificationScreen } from '../screens/OtpVerificationScreen';
 import { PhoneAuthScreen } from '../screens/PhoneAuthScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
+import { SoundSettingsScreen } from '../screens/SoundSettingsScreen';
 import { WelcomeScreen } from '../screens/WelcomeScreen';
 import { AppTabBar } from './AppTabBar';
 import { MainTabParamList, RootStackParamList } from './types';
@@ -45,6 +47,8 @@ export function RootNavigator() {
           <>
             <Stack.Screen name="MainTabs" component={MainTabs} />
             <Stack.Screen name="Chat" component={ChatScreen} />
+            <Stack.Screen name="Alerts" component={AlertsScreen} />
+            <Stack.Screen name="SoundSettings" component={SoundSettingsScreen} />
           </>
         ) : (
           <>

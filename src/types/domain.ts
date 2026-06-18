@@ -1,4 +1,4 @@
-export type AlertCategory = 'Seguridad' | 'Transito' | 'Comunidad' | 'Servicios';
+export type AlertCategory = 'Seguridad' | 'Tr\u00e1nsito' | 'Comunidad' | 'Servicios';
 
 export type UserProfile = {
   id: string;
@@ -34,8 +34,10 @@ export type Message = {
 export type CommunityAlert = {
   id: string;
   groupId: string;
+  userId?: string;
   category: AlertCategory;
   title: string;
   description: string;
+  soundType: AlertCategory;
   createdAt: Date;
 };
