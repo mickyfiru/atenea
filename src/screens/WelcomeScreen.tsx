@@ -30,8 +30,8 @@ export function WelcomeScreen({ navigation }: RootScreenProps<'Welcome'>) {
       <View style={styles.actions}>
         <PrimaryButton label="Ingresar con celular" onPress={() => navigation.navigate('PhoneAuth')} />
         <PrimaryButton
-          label="Ver demo"
-          onPress={() => navigation.replace('MainTabs', { screen: 'Atenea' })}
+          label="Iniciar sesion"
+          onPress={() => navigation.navigate('PhoneAuth')}
           variant="light"
         />
       </View>

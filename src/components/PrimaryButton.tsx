@@ -5,20 +5,29 @@ import { colors, radius } from '../constants/theme';
 type PrimaryButtonProps = {
   label: string;
   onPress: () => void;
+  disabled?: boolean;
   variant?: 'primary' | 'light';
   style?: ViewStyle;
 };
 
-export function PrimaryButton({ label, onPress, variant = 'primary', style }: PrimaryButtonProps) {
+export function PrimaryButton({
+  label,
+  onPress,
+  disabled,
+  variant = 'primary',
+  style,
+}: PrimaryButtonProps) {
   const isLight = variant === 'light';
 
   return (
     <Pressable
+      disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
         styles.button,
         isLight && styles.light,
         pressed && styles.pressed,
+        disabled && styles.disabled,
         style,
       ]}
     >
@@ -42,6 +51,9 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.82,
     transform: [{ scale: 0.99 }],
+  },
+  disabled: {
+    opacity: 0.58,
   },
   label: {
     color: colors.background,

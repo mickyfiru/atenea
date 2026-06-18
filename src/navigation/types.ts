@@ -5,7 +5,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 export type RootStackParamList = {
   Welcome: undefined;
   PhoneAuth: undefined;
-  OtpVerification: { phoneNumber: string; verificationId?: string };
+  OtpVerification: { phoneNumber: string; confirmationId: string };
   MainTabs: NavigatorScreenParams<MainTabParamList>;
 };
 

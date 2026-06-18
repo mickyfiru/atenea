@@ -2,6 +2,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
+import { useAuth } from '../context/AuthContext';
 import { AteneaScreen } from '../screens/AteneaScreen';
 import { GroupsScreen } from '../screens/GroupsScreen';
 import { OtpVerificationScreen } from '../screens/OtpVerificationScreen';
@@ -29,19 +30,25 @@ function MainTabs() {
 }
 
 export function RootNavigator() {
+  const { user } = useAuth();
+
   return (
     <NavigationContainer>
       <Stack.Navigator
-        initialRouteName="Welcome"
         screenOptions={{
           contentStyle: { backgroundColor: '#FFFFFF' },
           headerShown: false,
         }}
       >
-        <Stack.Screen name="Welcome" component={WelcomeScreen} />
-        <Stack.Screen name="PhoneAuth" component={PhoneAuthScreen} />
-        <Stack.Screen name="OtpVerification" component={OtpVerificationScreen} />
-        <Stack.Screen name="MainTabs" component={MainTabs} />
+        {user ? (
+          <Stack.Screen name="MainTabs" component={MainTabs} />
+        ) : (
+          <>
+            <Stack.Screen name="Welcome" component={WelcomeScreen} />
+            <Stack.Screen name="PhoneAuth" component={PhoneAuthScreen} />
+            <Stack.Screen name="OtpVerification" component={OtpVerificationScreen} />
+          </>
+        )}
       </Stack.Navigator>
     </NavigationContainer>
   );

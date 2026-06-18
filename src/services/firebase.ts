@@ -1,17 +1,31 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApp, getApps, initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import {
+  browserLocalPersistence,
+  getAuth,
+  initializeAuth,
+  type Persistence,
+} from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { Platform } from 'react-native';
 
-const firebaseConfig = {
-  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY ?? '',
-  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN ?? '',
-  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID ?? '',
-  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET ?? '',
-  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ?? '',
-  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID ?? '',
+export const EXPECTED_FIREBASE_PROJECT_ID = 'atena-5ebd9';
+
+export const firebaseConfig = {
+  apiKey: 'AIzaSyDxvEioJdy0wJ-HDkTwaQHNmh_3uLs0CTc',
+  authDomain: 'atena-5ebd9.firebaseapp.com',
+  projectId: EXPECTED_FIREBASE_PROJECT_ID,
+  storageBucket: 'atena-5ebd9.firebasestorage.app',
+  messagingSenderId: '915187577180',
+  appId: '1:915187577180:web:af722e359a97d104859199',
+  measurementId: 'G-PV8PV178NF',
 };
 
 export const isFirebaseConfigured = Object.values(firebaseConfig).every(Boolean);
+
+type ReactNativeAuthModule = {
+  getReactNativePersistence: (storage: typeof AsyncStorage) => Persistence;
+};
 
 export const firebaseApp = isFirebaseConfigured
   ? getApps().length
@@ -19,5 +33,27 @@ export const firebaseApp = isFirebaseConfigured
     : initializeApp(firebaseConfig)
   : undefined;
 
-export const auth = firebaseApp ? getAuth(firebaseApp) : undefined;
+function createAuth() {
+  if (!firebaseApp) {
+    return undefined;
+  }
+
+  try {
+    const persistence: Persistence =
+      Platform.OS === 'web'
+        ? browserLocalPersistence
+        : // Firebase exposes this helper from its React Native conditional export at runtime.
+          (require('@firebase/auth') as ReactNativeAuthModule).getReactNativePersistence(
+            AsyncStorage,
+          );
+
+    return initializeAuth(firebaseApp, {
+      persistence,
+    });
+  } catch {
+    return getAuth(firebaseApp);
+  }
+}
+
+export const auth = createAuth();
 export const db = firebaseApp ? getFirestore(firebaseApp) : undefined;

@@ -5,9 +5,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ProfileOptionRow } from '../components/ProfileOptionRow';
 import { SectionCard } from '../components/SectionCard';
 import { colors, radius } from '../constants/theme';
+import { useAuth } from '../context/AuthContext';
 import { mockUser } from '../data/mockData';
 
 export function ProfileScreen() {
+  const { user } = useAuth();
+  const phoneNumber = user?.phoneNumber ?? mockUser.phoneNumber;
+
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.safe}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -22,7 +26,7 @@ export function ProfileScreen() {
           </View>
           <View style={styles.userText}>
             <Text style={styles.userName}>{mockUser.displayName}</Text>
-            <Text style={styles.phone}>{mockUser.phoneNumber}</Text>
+            <Text style={styles.phone}>{phoneNumber}</Text>
           </View>
         </View>
 
