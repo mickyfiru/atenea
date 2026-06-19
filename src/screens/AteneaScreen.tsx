@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { NavigationProp, useNavigation } from '@react-navigation/native';
 import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AlertComposerModal } from '../components/AlertComposerModal';
@@ -11,10 +11,34 @@ import { QuickActionCard } from '../components/QuickActionCard';
 import { colors, radius } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 import { RootStackParamList } from '../navigation/types';
+import { parseCommand } from '../services/commands';
 import { subscribeUserGroups } from '../services/groups';
 import { AlertCategory, CommunityGroup } from '../types/domain';
 
 const suggestions = ['"What happened today?"', '"Call an ambulance"', '"Start recording"'];
+const helpResponse = `Puedo ayudarte con:
+
+• Crear alertas
+• Ver grupos
+• Ver alertas
+• Resumir tu sector
+• Configurar sonidos
+• Configurar ubicacion
+
+Prueba escribiendo:
+
+"crear alerta"
+"ver grupos"
+"resumir mi sector"`;
+const unknownResponse = `Lo siento, todavia no entiendo esa instruccion.
+
+Prueba escribiendo:
+
+• crear alerta
+• ver grupos
+• ver alertas
+• resumir mi sector
+• mi ubicacion`;
 
 const quickActions = [
   {
@@ -55,6 +79,8 @@ export function AteneaScreen() {
   const [groups, setGroups] = useState<CommunityGroup[]>([]);
   const [alertCategory, setAlertCategory] = useState<AlertCategory>('Seguridad');
   const [alertComposerVisible, setAlertComposerVisible] = useState(false);
+  const [commandText, setCommandText] = useState('');
+  const [ateneaResponse, setAteneaResponse] = useState('');
 
   useEffect(() => {
     if (!user) {
@@ -63,6 +89,55 @@ export function AteneaScreen() {
 
     return subscribeUserGroups(user.uid, setGroups, () => undefined);
   }, [user]);
+
+  function handleSubmitCommand() {
+    const parsedCommand = parseCommand(commandText);
+
+    if (!commandText.trim()) {
+      setAteneaResponse(unknownResponse);
+      return;
+    }
+
+    setCommandText('');
+
+    switch (parsedCommand.intent) {
+      case 'CREATE_ALERT':
+        setAlertCategory('Seguridad');
+        setAlertComposerVisible(true);
+        setAteneaResponse('');
+        return;
+      case 'OPEN_GROUPS':
+        navigation.navigate('MainTabs', { screen: 'Groups' });
+        setAteneaResponse('');
+        return;
+      case 'OPEN_ALERTS':
+        navigation.navigate('Alerts');
+        setAteneaResponse('');
+        return;
+      case 'OPEN_SUMMARY':
+        navigation.navigate('Summary');
+        setAteneaResponse('');
+        return;
+      case 'OPEN_LOCATION':
+        navigation.navigate('LocationSettings');
+        setAteneaResponse('');
+        return;
+      case 'OPEN_SOUND_SETTINGS':
+        navigation.navigate('SoundSettings');
+        setAteneaResponse('');
+        return;
+      case 'OPEN_PROFILE':
+        navigation.navigate('MainTabs', { screen: 'Profile' });
+        setAteneaResponse('');
+        return;
+      case 'HELP':
+        setAteneaResponse(helpResponse);
+        return;
+      case 'UNKNOWN':
+        setAteneaResponse(unknownResponse);
+        return;
+    }
+  }
 
   return (
     <SafeAreaView edges={['left', 'right']} style={styles.safe}>
@@ -85,6 +160,12 @@ export function AteneaScreen() {
             </View>
           ))}
         </View>
+
+        {ateneaResponse ? (
+          <View style={styles.responseCard}>
+            <Text style={styles.responseText}>{ateneaResponse}</Text>
+          </View>
+        ) : null}
 
         <View style={styles.quickBlock}>
           <Text style={styles.sectionTitle}>QUICK ACTIONS</Text>
@@ -116,16 +197,20 @@ export function AteneaScreen() {
       </ScrollView>
       <View style={styles.inputBar}>
         <TextInput
+          onChangeText={setCommandText}
+          onSubmitEditing={handleSubmitCommand}
           placeholder="Ask Atenea anything..."
           placeholderTextColor={colors.muted}
+          returnKeyType="send"
           style={styles.input}
+          value={commandText}
         />
-        <View style={styles.micButton}>
+        <Pressable style={styles.micButton}>
           <Ionicons name="mic-outline" size={24} color={colors.primary} />
-        </View>
-        <View style={styles.sendButton}>
+        </Pressable>
+        <Pressable onPress={handleSubmitCommand} style={styles.sendButton}>
           <Ionicons name="paper-plane-outline" size={24} color={colors.background} />
-        </View>
+        </Pressable>
       </View>
       <AlertComposerModal
         groups={groups}
@@ -181,6 +266,20 @@ const styles = StyleSheet.create({
     color: '#263D5C',
     fontSize: 14,
     fontWeight: '700',
+  },
+  responseCard: {
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.lg,
+    marginTop: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    width: '100%',
+  },
+  responseText: {
+    color: '#263D5C',
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 21,
   },
   quickBlock: {
     marginTop: 18,
