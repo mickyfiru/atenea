@@ -5,6 +5,7 @@ import { colors, radius } from '../constants/theme';
 import { CategorySummary } from '../services/summary';
 import { getAlertCategoryTone } from '../utils/alerts';
 import { formatRelativeTime } from '../utils/dates';
+import { formatDistance } from '../utils/distance';
 
 type SummaryCardProps = {
   summary: CategorySummary;
@@ -33,7 +34,7 @@ export function SummaryCard({ summary }: SummaryCardProps) {
         <View style={styles.nearbyLine}>
           <Ionicons name="navigate-outline" size={16} color={tone.color} />
           <Text style={[styles.nearbyText, { color: tone.color }]}>
-            {summary.nearbyCount} cercanas en mi sector
+            {summary.nearbyCount} a menos de 10 km
           </Text>
         </View>
 
@@ -54,6 +55,7 @@ export function SummaryCard({ summary }: SummaryCardProps) {
                 <Text style={styles.eventTitle}>{event.title}</Text>
                 <Text style={styles.eventMeta} numberOfLines={1}>
                   {event.groupName} · {formatRelativeTime(event.createdAt)}
+                  {event.distanceKm !== undefined ? ` · ${formatDistance(event.distanceKm)}` : ''}
                 </Text>
               </View>
             </View>

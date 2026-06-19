@@ -16,18 +16,40 @@ import { useAuth } from '../context/AuthContext';
 import { RootScreenProps } from '../navigation/types';
 import { ALERT_CATEGORIES, subscribeAlertsForGroups } from '../services/alerts';
 import { subscribeUserGroups } from '../services/groups';
-import { AlertCategory, CommunityAlert, CommunityGroup } from '../types/domain';
+import { subscribeUserLocation } from '../services/location';
+import { AlertCategory, CommunityAlert, CommunityGroup, UserLocation } from '../types/domain';
 import { getAlertCategoryTone } from '../utils/alerts';
+import { getAlertDistanceKm, isAlertWithinKm } from '../utils/distance';
 
 type Filter = 'Todas' | AlertCategory;
+type DistanceFilter = 'Todas' | 'Cerca de m\u00ed' | '1 km' | '5 km' | '10 km';
+
+const DISTANCE_FILTERS: DistanceFilter[] = ['Todas', 'Cerca de m\u00ed', '1 km', '5 km', '10 km'];
+
+function getDistanceRadiusKm(filter: DistanceFilter) {
+  switch (filter) {
+    case 'Cerca de m\u00ed':
+      return 10;
+    case '1 km':
+      return 1;
+    case '5 km':
+      return 5;
+    case '10 km':
+      return 10;
+    case 'Todas':
+      return undefined;
+  }
+}
 
 export function AlertsScreen({ navigation, route }: RootScreenProps<'Alerts'>) {
   const { user } = useAuth();
   const [groups, setGroups] = useState<CommunityGroup[]>([]);
+  const [userLocation, setUserLocation] = useState<UserLocation>();
   const [alerts, setAlerts] = useState<CommunityAlert[]>([]);
   const [filter, setFilter] = useState<Filter>(
     (route.params?.initialCategory as AlertCategory | undefined) ?? 'Todas',
   );
+  const [distanceFilter, setDistanceFilter] = useState<DistanceFilter>('Todas');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -47,6 +69,19 @@ export function AlertsScreen({ navigation, route }: RootScreenProps<'Alerts'>) {
         setError(groupsError.message);
         setLoading(false);
       },
+    );
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) {
+      setUserLocation(undefined);
+      return undefined;
+    }
+
+    return subscribeUserLocation(
+      user.uid,
+      setUserLocation,
+      (locationError) => setError(locationError.message),
     );
   }, [user]);
 
@@ -72,9 +107,32 @@ export function AlertsScreen({ navigation, route }: RootScreenProps<'Alerts'>) {
   );
 
   const filteredAlerts = useMemo(
-    () => (filter === 'Todas' ? alerts : alerts.filter((alert) => alert.category === filter)),
-    [alerts, filter],
+    () => {
+      const radiusKm = getDistanceRadiusKm(distanceFilter);
+      const locationActive = Boolean(userLocation?.locationEnabled);
+      const categoryAlerts =
+        filter === 'Todas' ? alerts : alerts.filter((alert) => alert.category === filter);
+
+      if (!radiusKm) {
+        return categoryAlerts;
+      }
+
+      if (!locationActive) {
+        return [];
+      }
+
+      return categoryAlerts
+        .filter((alert) => isAlertWithinKm(alert, userLocation, radiusKm))
+        .sort(
+          (a, b) =>
+            (getAlertDistanceKm(a, userLocation) ?? Number.POSITIVE_INFINITY) -
+            (getAlertDistanceKm(b, userLocation) ?? Number.POSITIVE_INFINITY),
+        );
+    },
+    [alerts, distanceFilter, filter, userLocation],
   );
+
+  const needsLocation = distanceFilter !== 'Todas' && !userLocation?.locationEnabled;
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.safe}>
@@ -89,6 +147,34 @@ export function AlertsScreen({ navigation, route }: RootScreenProps<'Alerts'>) {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filters}>
+          {DISTANCE_FILTERS.map((nextFilter) => {
+            const active = distanceFilter === nextFilter;
+
+            return (
+              <Pressable
+                key={nextFilter}
+                onPress={() => setDistanceFilter(nextFilter)}
+                style={[
+                  styles.filterPill,
+                  {
+                    backgroundColor: active ? colors.primary : colors.primarySoft,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.filterText,
+                    { color: active ? colors.background : colors.primary },
+                  ]}
+                >
+                  {nextFilter}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filters}>
           {(['Todas', ...ALERT_CATEGORIES] as Filter[]).map((category) => {
             const active = filter === category;
@@ -130,6 +216,10 @@ export function AlertsScreen({ navigation, route }: RootScreenProps<'Alerts'>) {
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
+        {needsLocation ? (
+          <Text style={styles.locationHint}>Activa tu ubicación para ver alertas cercanas</Text>
+        ) : null}
+
         {!loading && !filteredAlerts.length ? (
           <Text style={styles.empty}>No hay alertas para este filtro.</Text>
         ) : null}
@@ -137,7 +227,11 @@ export function AlertsScreen({ navigation, route }: RootScreenProps<'Alerts'>) {
         <View style={styles.list}>
           {filteredAlerts.map((alert, index) => (
             <View key={alert.id}>
-              <AlertRow alert={alert} group={groupsById.get(alert.groupId)} />
+              <AlertRow
+                alert={alert}
+                group={groupsById.get(alert.groupId)}
+                userLocation={userLocation}
+              />
               {index < filteredAlerts.length - 1 ? <View style={styles.separator} /> : null}
             </View>
           ))}
@@ -217,6 +311,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     marginBottom: 16,
+  },
+  locationHint: {
+    backgroundColor: colors.warningSoft,
+    borderRadius: 16,
+    color: colors.warning,
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   empty: {
     color: colors.muted,

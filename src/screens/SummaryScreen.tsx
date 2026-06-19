@@ -101,9 +101,20 @@ export function SummaryScreen({ navigation }: RootScreenProps<'Summary'>) {
   }, [summaries]);
 
   const nearbyAlertCount = useMemo(
-    () => summaries.reduce((total, summary) => total + summary.nearbyCount, 0),
+    () => summaries.reduce((total, summary) => total + summary.distanceCounts.under10Km, 0),
     [summaries],
   );
+
+  const distanceCounts = useMemo(
+    () => ({
+      under1Km: summaries.reduce((total, summary) => total + summary.distanceCounts.under1Km, 0),
+      under5Km: summaries.reduce((total, summary) => total + summary.distanceCounts.under5Km, 0),
+      under10Km: summaries.reduce((total, summary) => total + summary.distanceCounts.under10Km, 0),
+    }),
+    [summaries],
+  );
+
+  const locationActive = Boolean(userLocation?.locationEnabled);
 
   const sectorLabel = useMemo(() => {
     if (!userLocation?.locationEnabled) {
@@ -130,6 +141,25 @@ export function SummaryScreen({ navigation }: RootScreenProps<'Summary'>) {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {!locationActive ? (
+          <Text style={styles.locationHint}>Activa tu ubicación para ver alertas cercanas</Text>
+        ) : null}
+
+        <View style={styles.distanceGrid}>
+          <View style={styles.distanceCard}>
+            <Text style={styles.distanceValue}>{distanceCounts.under1Km}</Text>
+            <Text style={styles.distanceLabel}>menos de 1 km</Text>
+          </View>
+          <View style={styles.distanceCard}>
+            <Text style={styles.distanceValue}>{distanceCounts.under5Km}</Text>
+            <Text style={styles.distanceLabel}>menos de 5 km</Text>
+          </View>
+          <View style={styles.distanceCard}>
+            <Text style={styles.distanceValue}>{distanceCounts.under10Km}</Text>
+            <Text style={styles.distanceLabel}>menos de 10 km</Text>
+          </View>
+        </View>
+
         <CategoryFilter value={filter} onChange={setFilter} />
 
         {loading ? (
@@ -233,6 +263,41 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     padding: 22,
+    textAlign: 'center',
+  },
+  locationHint: {
+    backgroundColor: colors.warningSoft,
+    borderRadius: 16,
+    color: colors.warning,
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  distanceGrid: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  distanceCard: {
+    backgroundColor: colors.primarySoft,
+    borderRadius: 16,
+    flex: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 14,
+  },
+  distanceValue: {
+    color: colors.primary,
+    fontSize: 22,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  distanceLabel: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: '800',
+    marginTop: 4,
     textAlign: 'center',
   },
 });

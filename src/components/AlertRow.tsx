@@ -2,17 +2,21 @@ import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { colors } from '../constants/theme';
-import { CommunityAlert, CommunityGroup } from '../types/domain';
+import { CommunityAlert, CommunityGroup, UserLocation } from '../types/domain';
 import { getAlertCategoryTone } from '../utils/alerts';
 import { formatRelativeTime } from '../utils/dates';
+import { formatDistance, getAlertDistanceKm } from '../utils/distance';
 
 type AlertRowProps = {
   alert: CommunityAlert;
   group?: CommunityGroup;
+  userLocation?: UserLocation;
 };
 
-export function AlertRow({ alert, group }: AlertRowProps) {
+export function AlertRow({ alert, group, userLocation }: AlertRowProps) {
   const tone = getAlertCategoryTone(alert.category);
+  const distanceLabel = formatDistance(getAlertDistanceKm(alert, userLocation));
+  const placeLabel = distanceLabel || [alert.district, alert.city].filter(Boolean).join(', ');
 
   return (
     <View style={styles.row}>
@@ -31,7 +35,8 @@ export function AlertRow({ alert, group }: AlertRowProps) {
           {alert.description || 'Sin descripcion'}
         </Text>
         <Text style={styles.group} numberOfLines={1}>
-          {group?.name ?? alert.groupId} · soundType: {alert.soundType}
+          {group?.name ?? alert.groupId}
+          {placeLabel ? ` · ${placeLabel}` : ''}
         </Text>
       </View>
     </View>
