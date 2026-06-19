@@ -13,6 +13,7 @@ import {
 
 import { AlertCategory, CommunityAlert } from '../types/domain';
 import { db } from './firebase';
+import { getUserLocation } from './location';
 import { markAlertSoundHandled, playAlertSound } from './sounds';
 
 export const ALERT_CATEGORIES: AlertCategory[] = [
@@ -29,6 +30,10 @@ type FirestoreAlert = {
   title: string;
   description: string;
   soundType?: AlertCategory;
+  latitude?: number | null;
+  longitude?: number | null;
+  city?: string;
+  district?: string;
   createdAt?: Timestamp;
 };
 
@@ -59,6 +64,10 @@ function snapshotToAlert(snapshot: QueryDocumentSnapshot<DocumentData>): Communi
     title: data.title,
     description: data.description,
     soundType: data.soundType ?? data.category,
+    latitude: typeof data.latitude === 'number' ? data.latitude : undefined,
+    longitude: typeof data.longitude === 'number' ? data.longitude : undefined,
+    city: data.city ?? '',
+    district: data.district ?? '',
     createdAt: data.createdAt?.toDate() ?? new Date(),
   };
 }
@@ -76,6 +85,21 @@ export async function createAlert(input: CreateAlertInput) {
     throw new Error('Ingresa un titulo para la alerta.');
   }
 
+  const location = await getUserLocation(input.userId);
+  const locationPayload = location.locationEnabled
+    ? {
+        latitude: location.latitude ?? null,
+        longitude: location.longitude ?? null,
+        city: location.city,
+        district: location.district,
+      }
+    : {
+        latitude: null,
+        longitude: null,
+        city: '',
+        district: '',
+      };
+
   const alertRef = await addDoc(collection(firestore, 'alerts'), {
     groupId: input.groupId,
     userId: input.userId,
@@ -83,6 +107,7 @@ export async function createAlert(input: CreateAlertInput) {
     title,
     description,
     soundType: input.category,
+    ...locationPayload,
     createdAt: serverTimestamp(),
   });
 

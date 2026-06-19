@@ -7,10 +7,12 @@ import { AlertsScreen } from '../screens/AlertsScreen';
 import { AteneaScreen } from '../screens/AteneaScreen';
 import { ChatScreen } from '../screens/ChatScreen';
 import { GroupsScreen } from '../screens/GroupsScreen';
+import { LocationSettingsScreen } from '../screens/LocationSettingsScreen';
 import { OtpVerificationScreen } from '../screens/OtpVerificationScreen';
 import { PhoneAuthScreen } from '../screens/PhoneAuthScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { SoundSettingsScreen } from '../screens/SoundSettingsScreen';
+import { SummaryScreen } from '../screens/SummaryScreen';
 import { WelcomeScreen } from '../screens/WelcomeScreen';
 import { AppTabBar } from './AppTabBar';
 import { MainTabParamList, RootStackParamList } from './types';
@@ -49,6 +51,8 @@ export function RootNavigator() {
             <Stack.Screen name="Chat" component={ChatScreen} />
             <Stack.Screen name="Alerts" component={AlertsScreen} />
             <Stack.Screen name="SoundSettings" component={SoundSettingsScreen} />
+            <Stack.Screen name="Summary" component={SummaryScreen} />
+            <Stack.Screen name="LocationSettings" component={LocationSettingsScreen} />
           </>
         ) : (
           <>

@@ -5,6 +5,21 @@ export type UserProfile = {
   phoneNumber: string;
   displayName: string;
   createdAt: Date;
+  locationEnabled: boolean;
+  latitude?: number;
+  longitude?: number;
+  city: string;
+  district: string;
+  updatedAt?: Date;
+};
+
+export type UserLocation = {
+  locationEnabled: boolean;
+  latitude?: number;
+  longitude?: number;
+  city: string;
+  district: string;
+  updatedAt?: Date;
 };
 
 export type CommunityGroup = {
@@ -39,5 +54,9 @@ export type CommunityAlert = {
   title: string;
   description: string;
   soundType: AlertCategory;
+  latitude?: number;
+  longitude?: number;
+  city: string;
+  district: string;
   createdAt: Date;
 };

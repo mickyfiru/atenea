@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { NavigationProp, useNavigation } from '@react-navigation/native';
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,6 +10,7 @@ import { AteneaOrb } from '../components/AteneaOrb';
 import { QuickActionCard } from '../components/QuickActionCard';
 import { colors, radius } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
+import { RootStackParamList } from '../navigation/types';
 import { subscribeUserGroups } from '../services/groups';
 import { AlertCategory, CommunityGroup } from '../types/domain';
 
@@ -48,6 +50,7 @@ const quickActions = [
 ];
 
 export function AteneaScreen() {
+  const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const { user } = useAuth();
   const [groups, setGroups] = useState<CommunityGroup[]>([]);
   const [alertCategory, setAlertCategory] = useState<AlertCategory>('Seguridad');
@@ -98,6 +101,11 @@ export function AteneaScreen() {
                   if (action.category) {
                     setAlertCategory(action.category);
                     setAlertComposerVisible(true);
+                    return;
+                  }
+
+                  if (action.title === 'Summarize') {
+                    navigation.navigate('Summary');
                   }
                 }}
               />

@@ -6,6 +6,12 @@ export const mockUser: UserProfile = {
   phoneNumber: '+56 9 8765 4321',
   displayName: 'Vecino River District',
   createdAt: new Date('2026-06-16T21:36:00'),
+  locationEnabled: true,
+  latitude: -33.4489,
+  longitude: -70.6693,
+  city: 'Santiago',
+  district: 'River District',
+  updatedAt: new Date('2026-06-16T21:36:00'),
 };
 
 export const emergencyGroups: CommunityGroup[] = [
@@ -118,6 +124,8 @@ export const mockAlerts: CommunityAlert[] = [
     title: 'Reportes cerca del parque central',
     description: 'Dos reportes de robo fueron ingresados hoy.',
     soundType: 'Seguridad',
+    city: 'Santiago',
+    district: 'River District',
     createdAt: new Date(),
   },
   {
@@ -127,6 +135,8 @@ export const mockAlerts: CommunityAlert[] = [
     title: 'Accidente en avenida principal',
     description: 'Dos pistas bloqueadas, se recomienda ruta alternativa.',
     soundType: 'Tr\u00e1nsito',
+    city: 'Santiago',
+    district: 'River District',
     createdAt: new Date(),
   },
   {
@@ -136,6 +146,8 @@ export const mockAlerts: CommunityAlert[] = [
     title: 'Actividad vecinal',
     description: 'Reunion comunitaria confirmada para esta semana.',
     soundType: 'Comunidad',
+    city: 'Santiago',
+    district: 'River District',
     createdAt: new Date(),
   },
   {
@@ -145,6 +157,8 @@ export const mockAlerts: CommunityAlert[] = [
     title: 'Mantencion programada',
     description: 'Revision de luminarias en River District.',
     soundType: 'Servicios',
+    city: 'Santiago',
+    district: 'River District',
     createdAt: new Date(),
   },
 ];

@@ -4,6 +4,12 @@ export const FIRESTORE_COLLECTIONS = {
     phoneNumber: 'string',
     displayName: 'string',
     createdAt: 'timestamp',
+    locationEnabled: 'boolean',
+    latitude: 'number | null',
+    longitude: 'number | null',
+    city: 'string',
+    district: 'string',
+    updatedAt: 'timestamp',
   },
   groups: {
     id: 'string',
@@ -30,6 +36,10 @@ export const FIRESTORE_COLLECTIONS = {
     title: 'string',
     description: 'string',
     soundType: 'Seguridad | Tr\u00e1nsito | Comunidad | Servicios',
+    latitude: 'number | null',
+    longitude: 'number | null',
+    city: 'string',
+    district: 'string',
     createdAt: 'timestamp',
   },
 } as const;

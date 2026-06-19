@@ -10,6 +10,8 @@ export type RootStackParamList = {
   Chat: { groupId: string };
   Alerts: { initialCategory?: string } | undefined;
   SoundSettings: undefined;
+  Summary: undefined;
+  LocationSettings: undefined;
 };
 
 export type MainTabParamList = {

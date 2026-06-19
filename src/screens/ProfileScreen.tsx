@@ -71,6 +71,15 @@ export function ProfileScreen() {
           />
           <View style={styles.separator} />
           <ProfileOptionRow
+            icon="location-outline"
+            iconBackground={colors.primarySoft}
+            iconColor={colors.primary}
+            label="Mi ubicacion"
+            onPress={() => navigation.navigate('LocationSettings')}
+            value="Sector"
+          />
+          <View style={styles.separator} />
+          <ProfileOptionRow
             icon="volume-medium-outline"
             iconBackground={colors.violetSoft}
             iconColor={colors.violet}

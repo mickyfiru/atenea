@@ -17,7 +17,13 @@ export async function ensureUserDocument(user: User) {
       id: user.uid,
       phoneNumber: user.phoneNumber ?? '',
       displayName: '',
+      locationEnabled: false,
+      latitude: null,
+      longitude: null,
+      city: '',
+      district: '',
       createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
     });
   }
 
