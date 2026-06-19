@@ -14,7 +14,15 @@ import {
 } from 'firebase/firestore';
 
 import { Message } from '../types/domain';
+import {
+  assertAuthenticatedUser,
+  assertExistingGroup,
+  assertGroupMember,
+  assertNonEmptyText,
+} from '../utils/validation';
+import { auth } from './firebase';
 import { db } from './firebase';
+import { getGroupById } from './groups';
 
 type FirestoreMessage = {
   groupId: string;
@@ -67,10 +75,12 @@ export function subscribeGroupMessages(
 export async function sendGroupMessage(groupId: string, userId: string, text: string) {
   const firestore = assertFirestore();
   const trimmedText = text.trim();
+  assertAuthenticatedUser(auth?.currentUser, userId);
+  assertNonEmptyText(trimmedText, 'Ingresa un mensaje para enviar.');
 
-  if (!trimmedText) {
-    return;
-  }
+  const group = await getGroupById(groupId);
+  assertExistingGroup(group);
+  assertGroupMember(group, userId);
 
   await addDoc(collection(firestore, 'messages'), {
     groupId,

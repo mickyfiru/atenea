@@ -50,6 +50,7 @@ export type CommunityAlert = {
   id: string;
   groupId: string;
   userId?: string;
+  createdBy?: string;
   category: AlertCategory;
   title: string;
   description: string;

@@ -32,6 +32,7 @@ export const FIRESTORE_COLLECTIONS = {
     id: 'string',
     groupId: 'string',
     userId: 'string',
+    createdBy: 'string',
     category: 'Seguridad | Tr\u00e1nsito | Comunidad | Servicios',
     title: 'string',
     description: 'string',

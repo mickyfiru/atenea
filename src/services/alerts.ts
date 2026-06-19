@@ -12,7 +12,16 @@ import {
 } from 'firebase/firestore';
 
 import { AlertCategory, CommunityAlert } from '../types/domain';
-import { db } from './firebase';
+import {
+  assertAuthenticatedUser,
+  assertExistingGroup,
+  assertGroupMember,
+  assertNonEmptyText,
+  assertValidAlertCategory,
+  assertValidCoordinates,
+} from '../utils/validation';
+import { auth, db } from './firebase';
+import { getGroupById } from './groups';
 import { getUserLocation } from './location';
 import { markAlertSoundHandled, playAlertSound } from './sounds';
 
@@ -34,6 +43,7 @@ type FirestoreAlert = {
   longitude?: number | null;
   city?: string;
   district?: string;
+  createdBy?: string;
   createdAt?: Timestamp;
 };
 
@@ -64,6 +74,7 @@ function snapshotToAlert(snapshot: QueryDocumentSnapshot<DocumentData>): Communi
     title: data.title,
     description: data.description,
     soundType: data.soundType ?? data.category,
+    createdBy: data.createdBy ?? data.userId,
     latitude: typeof data.latitude === 'number' ? data.latitude : undefined,
     longitude: typeof data.longitude === 'number' ? data.longitude : undefined,
     city: data.city ?? '',
@@ -76,16 +87,24 @@ export async function createAlert(input: CreateAlertInput) {
   const firestore = assertFirestore();
   const title = input.title.trim();
   const description = input.description.trim();
+  assertAuthenticatedUser(auth?.currentUser, input.userId);
+  assertValidAlertCategory(input.category);
 
   if (!input.groupId) {
     throw new Error('Selecciona un grupo para la alerta.');
   }
 
-  if (!title) {
-    throw new Error('Ingresa un titulo para la alerta.');
-  }
+  assertNonEmptyText(title, 'Ingresa un titulo para la alerta.');
+
+  const group = await getGroupById(input.groupId);
+  assertExistingGroup(group);
+  assertGroupMember(group, input.userId);
 
   const location = await getUserLocation(input.userId);
+  if (location.locationEnabled) {
+    assertValidCoordinates(location.latitude, location.longitude);
+  }
+
   const locationPayload = location.locationEnabled
     ? {
         latitude: location.latitude ?? null,
@@ -103,6 +122,7 @@ export async function createAlert(input: CreateAlertInput) {
   const alertRef = await addDoc(collection(firestore, 'alerts'), {
     groupId: input.groupId,
     userId: input.userId,
+    createdBy: input.userId,
     category: input.category,
     title,
     description,

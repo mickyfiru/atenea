@@ -11,7 +11,8 @@ import {
 } from 'firebase/firestore';
 
 import { UserLocation } from '../types/domain';
-import { db } from './firebase';
+import { assertAuthenticatedUser, assertValidCoordinates } from '../utils/validation';
+import { auth, db } from './firebase';
 
 type FirestoreUserLocation = {
   locationEnabled?: boolean;
@@ -82,6 +83,8 @@ export function subscribeUserLocation(
 
 export async function enableOrUpdateUserLocation(userId: string) {
   const firestore = assertFirestore();
+  assertAuthenticatedUser(auth?.currentUser, userId);
+
   const permission = await Location.requestForegroundPermissionsAsync();
 
   if (permission.status !== Location.PermissionStatus.GRANTED) {
@@ -92,6 +95,8 @@ export async function enableOrUpdateUserLocation(userId: string) {
     accuracy: Location.Accuracy.Balanced,
   });
   const { latitude, longitude } = currentLocation.coords;
+  assertValidCoordinates(latitude, longitude);
+
   const sector = await resolveSector(latitude, longitude);
   const userLocation = {
     locationEnabled: true,
@@ -112,6 +117,7 @@ export async function enableOrUpdateUserLocation(userId: string) {
 
 export async function disableUserLocation(userId: string) {
   const firestore = assertFirestore();
+  assertAuthenticatedUser(auth?.currentUser, userId);
 
   await setDoc(
     doc(firestore, 'users', userId),

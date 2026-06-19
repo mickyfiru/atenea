@@ -20,7 +20,8 @@ import {
 import { colors } from '../constants/theme';
 import { CommunityGroup } from '../types/domain';
 import { formatRelativeTime } from '../utils/dates';
-import { db } from './firebase';
+import { assertAuthenticatedUser, assertNonEmptyText } from '../utils/validation';
+import { auth, db } from './firebase';
 
 const DEFAULT_GROUPS = [
   {
@@ -126,6 +127,7 @@ function snapshotToGroup(snapshot: QueryDocumentSnapshot<DocumentData>): Communi
 
 export async function ensureDefaultGroupsForUser(userId: string) {
   const firestore = assertFirestore();
+  assertAuthenticatedUser(auth?.currentUser, userId);
 
   await Promise.all(
     DEFAULT_GROUPS.map(async (group) => {
@@ -145,7 +147,7 @@ export async function ensureDefaultGroupsForUser(userId: string) {
           id: group.id,
           name: group.name,
           type: 'emergency',
-          createdBy: 'system',
+          createdBy: userId,
           members: arrayUnion(userId),
           createdAt: serverTimestamp(),
           lastMessage: group.lastMessage,
@@ -187,12 +189,13 @@ export function subscribeUserGroups(
 export async function createGroup(userId: string, name: string) {
   const firestore = assertFirestore();
   const trimmedName = name.trim();
+  assertAuthenticatedUser(auth?.currentUser, userId);
+  assertNonEmptyText(trimmedName, 'Ingresa un nombre para el grupo.');
 
-  if (!trimmedName) {
-    throw new Error('Ingresa un nombre para el grupo.');
-  }
+  const groupRef = doc(collection(firestore, 'groups'));
 
-  const groupRef = await addDoc(collection(firestore, 'groups'), {
+  await setDoc(groupRef, {
+    id: groupRef.id,
     name: trimmedName,
     type: 'community',
     createdBy: userId,
@@ -202,29 +205,27 @@ export async function createGroup(userId: string, name: string) {
     lastMessageAt: serverTimestamp(),
   });
 
-  await updateDoc(groupRef, { id: groupRef.id });
-
   return groupRef.id;
 }
 
 export async function joinGroupByCode(userId: string, code: string) {
   const firestore = assertFirestore();
   const groupId = code.trim();
+  assertAuthenticatedUser(auth?.currentUser, userId);
 
   if (!groupId) {
     throw new Error('Ingresa un codigo de invitacion.');
   }
 
   const groupRef = doc(firestore, 'groups', groupId);
-  const snapshot = await getDoc(groupRef);
 
-  if (!snapshot.exists()) {
+  try {
+    await updateDoc(groupRef, {
+      members: arrayUnion(userId),
+    });
+  } catch {
     throw new Error('No encontramos un grupo con ese codigo.');
   }
-
-  await updateDoc(groupRef, {
-    members: arrayUnion(userId),
-  });
 
   return groupId;
 }
