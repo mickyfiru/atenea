@@ -207,6 +207,16 @@ export function MapScreen({ navigation }: RootScreenProps<'Map'>) {
           <Text style={styles.locationHint}>Activa tu ubicacion para ver alertas cercanas.</Text>
         ) : null}
 
+        {!loading && !error && mapAlerts.length === 0 ? (
+          <View style={styles.emptyMapState}>
+            <Ionicons name="location-outline" size={24} color={colors.primary} />
+            <Text style={styles.emptyMapTitle}>Sin alertas en el mapa</Text>
+            <Text style={styles.emptyMapText}>
+              No hay alertas con ubicacion para el filtro actual.
+            </Text>
+          </View>
+        ) : null}
+
         {selectedAlert ? (
           <View style={styles.detailCard}>
             <View style={styles.detailHeader}>
@@ -409,6 +419,32 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 16,
     top: 78,
+  },
+  emptyMapState: {
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    borderColor: colors.line,
+    borderRadius: 18,
+    borderWidth: 1,
+    left: 20,
+    padding: 16,
+    position: 'absolute',
+    right: 20,
+    top: 136,
+  },
+  emptyMapTitle: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: '900',
+    marginTop: 8,
+  },
+  emptyMapText: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+    marginTop: 4,
+    textAlign: 'center',
   },
   detailCard: {
     backgroundColor: colors.background,

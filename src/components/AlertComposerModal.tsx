@@ -203,6 +203,12 @@ export function AlertComposerModal({
             })}
           </ScrollView>
 
+          {!groups.length ? (
+            <Text style={styles.emptyHint}>
+              Necesitas pertenecer a un grupo para crear alertas.
+            </Text>
+          ) : null}
+
           <TextInput
             editable={!saving}
             onChangeText={setTitle}
@@ -411,6 +417,15 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontSize: 13,
     fontWeight: '700',
+  },
+  emptyHint: {
+    backgroundColor: colors.warningSoft,
+    borderRadius: radius.md,
+    color: colors.warning,
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 18,
+    padding: 12,
   },
   actions: {
     gap: 10,

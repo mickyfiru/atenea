@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
 import {
-  addDoc,
   arrayUnion,
   collection,
   doc,

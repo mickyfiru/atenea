@@ -1,6 +1,6 @@
 # Firestore security for ATENEA
 
-This project includes baseline Firestore rules in `firestore.rules`.
+This project includes baseline Firestore rules in `firestore.rules` and Storage rules in `storage.rules`.
 
 ## Collections
 
@@ -20,6 +20,16 @@ The TypeScript services validate before writes:
 - messages and alerts target an existing group
 - messages and alerts are created only by group members
 
+## Storage evidence
+
+Alert photos and videos are uploaded under `alerts/{uid}/{fileName}`.
+
+- authenticated users can read alert media
+- users can upload only into their own `uid` folder
+- files must be image or video content types
+- files must be smaller than 20 MB
+- media cannot be updated or deleted by clients
+
 ## Group invitations
 
 Groups are not publicly readable. Joining by code updates the group membership directly and lets Firestore rules verify that the user is only adding their own `uid`.
@@ -32,6 +42,9 @@ Connect this file to Firebase Hosting/Firestore tooling with a `firebase.json` w
 {
   "firestore": {
     "rules": "firestore.rules"
+  },
+  "storage": {
+    "rules": "storage.rules"
   }
 }
 ```
@@ -39,7 +52,7 @@ Connect this file to Firebase Hosting/Firestore tooling with a `firebase.json` w
 Then deploy with:
 
 ```bash
-firebase deploy --only firestore:rules
+firebase deploy --only firestore:rules,storage
 ```
 
 Review the Firebase Console rules simulator before deploying to production.
