@@ -3,6 +3,7 @@ export type CommandIntent =
   | 'OPEN_GROUPS'
   | 'OPEN_ALERTS'
   | 'OPEN_SUMMARY'
+  | 'OPEN_MAP'
   | 'OPEN_LOCATION'
   | 'OPEN_SOUND_SETTINGS'
   | 'OPEN_PROFILE'

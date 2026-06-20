@@ -22,6 +22,7 @@ const helpResponse = `Puedo ayudarte con:
 • Ver grupos
 • Ver alertas
 • Resumir tu sector
+• Ver mapa
 • Configurar sonidos
 • Configurar ubicacion
 
@@ -38,6 +39,7 @@ Prueba escribiendo:
 • ver grupos
 • ver alertas
 • resumir mi sector
+• ver mapa
 • mi ubicacion`;
 
 const quickActions = [
@@ -116,6 +118,10 @@ export function AteneaScreen() {
         return;
       case 'OPEN_SUMMARY':
         navigation.navigate('Summary');
+        setAteneaResponse('');
+        return;
+      case 'OPEN_MAP':
+        navigation.navigate('Map');
         setAteneaResponse('');
         return;
       case 'OPEN_LOCATION':

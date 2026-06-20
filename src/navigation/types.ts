@@ -12,6 +12,7 @@ export type RootStackParamList = {
   SoundSettings: undefined;
   Summary: undefined;
   LocationSettings: undefined;
+  Map: undefined;
 };
 
 export type MainTabParamList = {

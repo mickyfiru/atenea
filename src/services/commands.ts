@@ -25,6 +25,14 @@ const COMMAND_PATTERNS: Array<{
     ],
   },
   {
+    intent: 'OPEN_MAP',
+    patterns: [
+      /\bver mapa\b/,
+      /\babrir mapa\b/,
+      /\bmapa\b/,
+    ],
+  },
+  {
     intent: 'OPEN_GROUPS',
     patterns: [
       /\bver grupos\b/,
