@@ -43,6 +43,8 @@ type FirestoreAlert = {
   longitude?: number | null;
   city?: string;
   district?: string;
+  mediaUrl?: string;
+  mediaType?: 'image' | 'video' | '';
   createdBy?: string;
   createdAt?: Timestamp;
 };
@@ -53,6 +55,8 @@ type CreateAlertInput = {
   category: AlertCategory;
   title: string;
   description: string;
+  mediaUrl?: string;
+  mediaType?: 'image' | 'video' | '';
 };
 
 function assertFirestore() {
@@ -79,6 +83,8 @@ function snapshotToAlert(snapshot: QueryDocumentSnapshot<DocumentData>): Communi
     longitude: typeof data.longitude === 'number' ? data.longitude : undefined,
     city: data.city ?? '',
     district: data.district ?? '',
+    mediaUrl: data.mediaUrl,
+    mediaType: data.mediaType ?? '',
     createdAt: data.createdAt?.toDate() ?? new Date(),
   };
 }
@@ -127,6 +133,8 @@ export async function createAlert(input: CreateAlertInput) {
     title,
     description,
     soundType: input.category,
+    mediaUrl: input.mediaUrl ?? '',
+    mediaType: input.mediaType ?? '',
     ...locationPayload,
     createdAt: serverTimestamp(),
   });

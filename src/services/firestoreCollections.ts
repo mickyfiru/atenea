@@ -9,6 +9,9 @@ export const FIRESTORE_COLLECTIONS = {
     longitude: 'number | null',
     city: 'string',
     district: 'string',
+    expoPushToken: 'string',
+    notificationsEnabled: 'boolean',
+    notificationsUpdatedAt: 'timestamp',
     updatedAt: 'timestamp',
   },
   groups: {
@@ -41,6 +44,8 @@ export const FIRESTORE_COLLECTIONS = {
     longitude: 'number | null',
     city: 'string',
     district: 'string',
+    mediaUrl: 'string',
+    mediaType: 'image | video | empty string',
     createdAt: 'timestamp',
   },
 } as const;

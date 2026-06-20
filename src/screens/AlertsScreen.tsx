@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AlertDetailModal } from '../components/AlertDetailModal';
 import { AlertRow } from '../components/AlertRow';
 import { colors, radius } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
@@ -50,6 +51,7 @@ export function AlertsScreen({ navigation, route }: RootScreenProps<'Alerts'>) {
     (route.params?.initialCategory as AlertCategory | undefined) ?? 'Todas',
   );
   const [distanceFilter, setDistanceFilter] = useState<DistanceFilter>('Todas');
+  const [selectedAlert, setSelectedAlert] = useState<CommunityAlert>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -230,6 +232,7 @@ export function AlertsScreen({ navigation, route }: RootScreenProps<'Alerts'>) {
               <AlertRow
                 alert={alert}
                 group={groupsById.get(alert.groupId)}
+                onPress={() => setSelectedAlert(alert)}
                 userLocation={userLocation}
               />
               {index < filteredAlerts.length - 1 ? <View style={styles.separator} /> : null}
@@ -237,6 +240,12 @@ export function AlertsScreen({ navigation, route }: RootScreenProps<'Alerts'>) {
           ))}
         </View>
       </ScrollView>
+      <AlertDetailModal
+        alert={selectedAlert}
+        group={selectedAlert ? groupsById.get(selectedAlert.groupId) : undefined}
+        onClose={() => setSelectedAlert(undefined)}
+        userLocation={userLocation}
+      />
     </SafeAreaView>
   );
 }

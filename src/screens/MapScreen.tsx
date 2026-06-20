@@ -8,6 +8,7 @@ import Mapbox, {
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -218,6 +219,15 @@ export function MapScreen({ navigation }: RootScreenProps<'Map'>) {
             <Text style={styles.detailDescription}>
               {selectedAlert.description || 'Sin descripcion'}
             </Text>
+            {selectedAlert.mediaUrl && selectedAlert.mediaType !== 'video' ? (
+              <Image source={{ uri: selectedAlert.mediaUrl }} style={styles.detailImage} />
+            ) : null}
+            {selectedAlert.mediaUrl && selectedAlert.mediaType === 'video' ? (
+              <View style={styles.detailVideo}>
+                <Ionicons name="videocam-outline" size={24} color={colors.primary} />
+                <Text style={styles.detailVideoText}>Video adjunto</Text>
+              </View>
+            ) : null}
             <Text style={styles.detailMeta}>
               {selectedDistance ? `${selectedDistance} · ` : ''}
               {formatRelativeTime(selectedAlert.createdAt)}
@@ -433,6 +443,28 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 20,
     marginTop: 6,
+  },
+  detailImage: {
+    backgroundColor: colors.soft,
+    borderRadius: 14,
+    height: 150,
+    marginTop: 12,
+    width: '100%',
+  },
+  detailVideo: {
+    alignItems: 'center',
+    backgroundColor: colors.primarySoft,
+    borderRadius: 14,
+    gap: 8,
+    height: 120,
+    justifyContent: 'center',
+    marginTop: 12,
+    width: '100%',
+  },
+  detailVideoText: {
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: '900',
   },
   detailMeta: {
     color: colors.muted,

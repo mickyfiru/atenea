@@ -3,11 +3,8 @@ import { PropsWithChildren, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { subscribeAlertsForGroups } from '../services/alerts';
 import { subscribeUserGroups } from '../services/groups';
-import {
-  markAlertSoundHandled,
-  playAlertSound,
-  wasAlertSoundHandled,
-} from '../services/sounds';
+import { registerExpoPushToken, sendLocalAlertNotification } from '../services/notifications';
+import { markAlertSoundHandled, wasAlertSoundHandled } from '../services/sounds';
 import { CommunityAlert } from '../types/domain';
 
 export function AlertSoundProvider({ children }: PropsWithChildren) {
@@ -22,6 +19,14 @@ export function AlertSoundProvider({ children }: PropsWithChildren) {
     seenAlertIdsRef.current.clear();
     setGroupIds([]);
   }, [user?.uid]);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    void registerExpoPushToken(user.uid);
+  }, [user]);
 
   useEffect(() => {
     if (!user) {
@@ -76,7 +81,7 @@ export function AlertSoundProvider({ children }: PropsWithChildren) {
       }
 
       markAlertSoundHandled(alert.id);
-      void playAlertSound(alert.soundType);
+      void sendLocalAlertNotification(alert);
     });
   }
 

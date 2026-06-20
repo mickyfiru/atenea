@@ -10,6 +10,9 @@ export type UserProfile = {
   longitude?: number;
   city: string;
   district: string;
+  expoPushToken?: string;
+  notificationsEnabled?: boolean;
+  notificationsUpdatedAt?: Date;
   updatedAt?: Date;
 };
 
@@ -59,5 +62,7 @@ export type CommunityAlert = {
   longitude?: number;
   city: string;
   district: string;
+  mediaUrl?: string;
+  mediaType?: 'image' | 'video' | '';
   createdAt: Date;
 };

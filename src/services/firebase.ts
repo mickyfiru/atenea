@@ -7,6 +7,7 @@ import {
   type Persistence,
 } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 import { Platform } from 'react-native';
 
 export const EXPECTED_FIREBASE_PROJECT_ID = 'atena-5ebd9';
@@ -57,3 +58,4 @@ function createAuth() {
 
 export const auth = createAuth();
 export const db = firebaseApp ? getFirestore(firebaseApp) : undefined;
+export const storage = firebaseApp ? getStorage(firebaseApp) : undefined;

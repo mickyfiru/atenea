@@ -22,6 +22,9 @@ export async function ensureUserDocument(user: User) {
       longitude: null,
       city: '',
       district: '',
+      expoPushToken: '',
+      notificationsEnabled: false,
+      notificationsUpdatedAt: serverTimestamp(),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });

@@ -1,6 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useState } from 'react';
 import {
+  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -12,6 +14,7 @@ import {
 
 import { colors, radius } from '../constants/theme';
 import { ALERT_CATEGORIES, createAlert } from '../services/alerts';
+import { uploadAlertMedia } from '../services/media';
 import { AlertCategory, CommunityGroup } from '../types/domain';
 import { getAlertCategoryTone } from '../utils/alerts';
 import { PrimaryButton } from './PrimaryButton';
@@ -35,6 +38,7 @@ export function AlertComposerModal({
   const [groupId, setGroupId] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [media, setMedia] = useState<ImagePicker.ImagePickerAsset>();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -64,21 +68,86 @@ export function AlertComposerModal({
     setError('');
 
     try {
+      const mediaUrl = media
+        ? await uploadAlertMedia({
+            uri: media.uri,
+            userId,
+            contentType: media.mimeType,
+          })
+        : undefined;
+
       await createAlert({
         userId,
         groupId: selectedGroupId,
         category,
         title,
         description,
+        mediaUrl,
+        mediaType: getAlertMediaType(media),
       });
       setTitle('');
       setDescription('');
       setGroupId('');
+      setMedia(undefined);
       onClose();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'No pudimos crear la alerta.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  function getAlertMediaType(asset?: ImagePicker.ImagePickerAsset) {
+    return asset?.type === 'video' ? 'video' : asset ? 'image' : '';
+  }
+
+  const takePhoto = async () => {
+    if (saving) {
+      return;
+    }
+
+    setError('');
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+
+    if (!permission.granted) {
+      setError('ATENEA necesita permiso de camara para tomar una foto.');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [4, 3],
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.72,
+    });
+
+    if (!result.canceled) {
+      setMedia(result.assets[0]);
+    }
+  };
+
+  const pickImage = async () => {
+    if (saving) {
+      return;
+    }
+
+    setError('');
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      setError('ATENEA necesita permiso de galeria para seleccionar una imagen.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: true,
+      aspect: [4, 3],
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      quality: 0.72,
+    });
+
+    if (!result.canceled) {
+      setMedia(result.assets[0]);
     }
   };
 
@@ -151,6 +220,37 @@ export function AlertComposerModal({
             style={[styles.input, styles.textArea]}
             value={description}
           />
+
+          <View style={styles.mediaActions}>
+            <Pressable disabled={saving} onPress={takePhoto} style={styles.mediaButton}>
+              <Ionicons name="camera-outline" size={20} color={colors.primary} />
+              <Text style={styles.mediaButtonText}>Tomar foto</Text>
+            </Pressable>
+            <Pressable disabled={saving} onPress={pickImage} style={styles.mediaButton}>
+              <Ionicons name="image-outline" size={20} color={colors.primary} />
+              <Text style={styles.mediaButtonText}>Galeria</Text>
+            </Pressable>
+          </View>
+
+          {media ? (
+            <View style={styles.previewWrap}>
+              {media.type === 'video' ? (
+                <View style={styles.videoPreview}>
+                  <Ionicons name="videocam-outline" size={28} color={colors.primary} />
+                  <Text style={styles.videoPreviewText}>Video seleccionado</Text>
+                </View>
+              ) : (
+                <Image source={{ uri: media.uri }} style={styles.previewImage} />
+              )}
+              <Pressable
+                disabled={saving}
+                onPress={() => setMedia(undefined)}
+                style={styles.removeMediaButton}
+              >
+                <Ionicons name="close" size={18} color={colors.background} />
+              </Pressable>
+            </View>
+          ) : null}
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -254,6 +354,58 @@ const styles = StyleSheet.create({
     minHeight: 92,
     paddingTop: 14,
     textAlignVertical: 'top',
+  },
+  mediaActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  mediaButton: {
+    alignItems: 'center',
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.md,
+    flex: 1,
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'center',
+    minHeight: 46,
+  },
+  mediaButtonText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  previewWrap: {
+    borderRadius: radius.md,
+    overflow: 'hidden',
+  },
+  previewImage: {
+    backgroundColor: colors.soft,
+    height: 150,
+    width: '100%',
+  },
+  videoPreview: {
+    alignItems: 'center',
+    backgroundColor: colors.primarySoft,
+    gap: 8,
+    height: 150,
+    justifyContent: 'center',
+    width: '100%',
+  },
+  videoPreviewText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  removeMediaButton: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(8, 20, 43, 0.72)',
+    borderRadius: 18,
+    height: 36,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: 10,
+    top: 10,
+    width: 36,
   },
   error: {
     color: colors.danger,

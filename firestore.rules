@@ -65,13 +65,18 @@ service cloud.firestore {
         'longitude',
         'city',
         'district',
+        'expoPushToken',
+        'notificationsEnabled',
+        'notificationsUpdatedAt',
         'updatedAt'
       ]) &&
       request.resource.data.id == userId &&
       request.resource.data.locationEnabled is bool &&
       isValidOptionalCoordinates(request.resource.data) &&
       isString(request.resource.data.city) &&
-      isString(request.resource.data.district);
+      isString(request.resource.data.district) &&
+      isString(request.resource.data.expoPushToken) &&
+      request.resource.data.notificationsEnabled is bool;
     }
 
     function validGroupDocument(groupId) {
@@ -139,6 +144,8 @@ service cloud.firestore {
         'longitude',
         'city',
         'district',
+        'mediaUrl',
+        'mediaType',
         'createdAt'
       ]) &&
       isNonEmptyString(request.resource.data.groupId) &&
@@ -151,6 +158,8 @@ service cloud.firestore {
       isString(request.resource.data.description) &&
       isString(request.resource.data.city) &&
       isString(request.resource.data.district) &&
+      isString(request.resource.data.mediaUrl) &&
+      request.resource.data.mediaType in ['', 'image', 'video'] &&
       isValidOptionalCoordinates(request.resource.data);
     }
 

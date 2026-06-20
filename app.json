@@ -34,6 +34,24 @@
         {
           "locationWhenInUsePermission": "ATENEA usa tu ubicacion para mostrar alertas cercanas en el mapa."
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "ATENEA usa tu galeria para adjuntar evidencia a una alerta.",
+          "cameraPermission": "ATENEA usa tu camara para tomar evidencia de una alerta."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "sounds": [
+            "./assets/sounds/security.wav",
+            "./assets/sounds/traffic.wav",
+            "./assets/sounds/community.wav",
+            "./assets/sounds/services.wav"
+          ]
+        }
       ]
     ]
   }
