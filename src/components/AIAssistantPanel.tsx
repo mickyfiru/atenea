@@ -1,14 +1,22 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { colors, radius } from '../constants/theme';
 import { useVoiceCommand } from '../hooks/useVoiceCommand';
 import {
+  AICommandHistoryEntry,
+  AICommandOrigin,
+  AICommandStatus,
   AIAssistantIntent,
   ParsedAlertCommand,
   sendMessage,
 } from '../services/ai/index';
+import {
+  clearAICommandHistory,
+  getAICommandHistory,
+  saveAICommandHistory,
+} from '../services/ai/aiHistory';
 import { speak } from '../services/voice/tts';
 import { getAlertCategoryTone } from '../utils/alerts';
 import { PrimaryButton } from './PrimaryButton';
@@ -22,10 +30,20 @@ export function AIAssistantPanel({ onCreateAlertDraft, onIntent }: AIAssistantPa
   const [input, setInput] = useState('');
   const [response, setResponse] = useState('');
   const [commandPreview, setCommandPreview] = useState<ParsedAlertCommand>();
+  const [history, setHistory] = useState<AICommandHistoryEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const submitPrompt = useCallback(async (promptText: string) => {
+  useEffect(() => {
+    void refreshHistory();
+  }, []);
+
+  async function refreshHistory() {
+    const nextHistory = await getAICommandHistory();
+    setHistory(nextHistory);
+  }
+
+  const submitPrompt = useCallback(async (promptText: string, origin: AICommandOrigin) => {
     const prompt = promptText.trim();
 
     if (!prompt || loading) {
@@ -39,9 +57,18 @@ export function AIAssistantPanel({ onCreateAlertDraft, onIntent }: AIAssistantPa
     try {
       const nextResponse = await sendMessage(prompt);
       const nextCommand = nextResponse.parsedCommand;
+      const nextHistory = await saveAICommandHistory(
+        buildHistoryEntry({
+          prompt,
+          command: nextCommand,
+          origin,
+          status: getCommandStatus(nextCommand),
+        }),
+      );
 
       setResponse(nextResponse.text);
       setCommandPreview(nextCommand);
+      setHistory(nextHistory);
       setInput('');
       await speak(getSpokenResponse(nextCommand));
 
@@ -49,7 +76,18 @@ export function AIAssistantPanel({ onCreateAlertDraft, onIntent }: AIAssistantPa
         onIntent?.(nextCommand.intent, nextCommand);
       }
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'Atenea no pudo responder.');
+      const message = submitError instanceof Error ? submitError.message : 'Atenea no pudo responder.';
+      const nextHistory = await saveAICommandHistory(
+        buildHistoryEntry({
+          prompt,
+          origin,
+          status: 'fallido',
+          executedAction: message,
+        }),
+      );
+
+      setHistory(nextHistory);
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -58,12 +96,12 @@ export function AIAssistantPanel({ onCreateAlertDraft, onIntent }: AIAssistantPa
   const voice = useVoiceCommand({
     onFinalTranscript: async (text) => {
       setInput(text);
-      await submitPrompt(text);
+      await submitPrompt(text, 'voice');
     },
   });
 
   async function submit() {
-    await submitPrompt(input);
+    await submitPrompt(input, 'text');
   }
 
   async function handleVoicePress() {
@@ -74,6 +112,11 @@ export function AIAssistantPanel({ onCreateAlertDraft, onIntent }: AIAssistantPa
 
     voice.reset();
     await voice.start();
+  }
+
+  async function handleClearHistory() {
+    await clearAICommandHistory();
+    setHistory([]);
   }
 
   const canCreateAlert = commandPreview?.intent === 'create_alert' && commandPreview.category;
@@ -212,8 +255,117 @@ export function AIAssistantPanel({ onCreateAlertDraft, onIntent }: AIAssistantPa
           </Text>
         </View>
       ) : null}
+
+      <View style={styles.historySection}>
+        <View style={styles.historyHeader}>
+          <Text style={styles.historyTitle}>Historial IA</Text>
+          {history.length ? (
+            <Pressable onPress={handleClearHistory} style={styles.clearHistoryButton}>
+              <Text style={styles.clearHistoryText}>Limpiar historial</Text>
+            </Pressable>
+          ) : null}
+        </View>
+
+        {history.length ? (
+          <View style={styles.historyList}>
+            {history.map((entry) => (
+              <View key={entry.id} style={styles.historyItem}>
+                <View style={styles.historyItemHeader}>
+                  <Text numberOfLines={2} style={styles.historyText}>
+                    {entry.originalText}
+                  </Text>
+                  <Text style={styles.historyTime}>{formatHistoryTime(entry.createdAt)}</Text>
+                </View>
+                <Text style={styles.historyMeta}>
+                  {formatIntent(entry.intent)}
+                  {entry.category ? ` / ${entry.category}` : ''} · {entry.origin === 'voice' ? 'voz' : 'texto'} · {entry.status}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.historyEmpty}>Tus ultimos comandos apareceran aqui.</Text>
+        )}
+      </View>
     </View>
   );
+}
+
+function buildHistoryEntry({
+  prompt,
+  command,
+  origin,
+  status,
+  executedAction,
+}: {
+  prompt: string;
+  command?: ParsedAlertCommand;
+  origin: AICommandOrigin;
+  status: AICommandStatus;
+  executedAction?: string;
+}): AICommandHistoryEntry {
+  return {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    originalText: prompt,
+    intent: command?.intent ?? 'unknown',
+    category: command?.category,
+    title: command?.title,
+    description: command?.description,
+    executedAction: executedAction ?? getExecutedAction(command),
+    origin,
+    createdAt: new Date().toISOString(),
+    status,
+  };
+}
+
+function getCommandStatus(command?: ParsedAlertCommand): AICommandStatus {
+  if (!command || command.intent === 'unknown') {
+    return 'fallido';
+  }
+
+  if (command.intent === 'open_groups' || command.intent === 'show_map') {
+    return 'ejecutado';
+  }
+
+  return 'detectado';
+}
+
+function getExecutedAction(command?: ParsedAlertCommand) {
+  switch (command?.intent) {
+    case 'create_alert':
+      return 'previsualizacion_alerta';
+    case 'call_emergency':
+      return 'preparar_contacto_emergencia';
+    case 'open_groups':
+      return 'abrir_grupos';
+    case 'show_map':
+      return 'abrir_mapa';
+    case 'unknown':
+    default:
+      return 'sin_accion';
+  }
+}
+
+function formatIntent(intent: AIAssistantIntent) {
+  switch (intent) {
+    case 'create_alert':
+      return 'crear alerta';
+    case 'call_emergency':
+      return 'emergencia';
+    case 'open_groups':
+      return 'grupos';
+    case 'show_map':
+      return 'mapa';
+    case 'unknown':
+      return 'desconocido';
+  }
+}
+
+function formatHistoryTime(createdAt: string) {
+  return new Intl.DateTimeFormat('es-CL', {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(createdAt));
 }
 
 function getVoiceStatusText(listening: boolean, processing: boolean) {
@@ -448,5 +600,74 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     lineHeight: 18,
+  },
+  historySection: {
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
+    gap: 10,
+    paddingTop: 12,
+  },
+  historyHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  historyTitle: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  clearHistoryButton: {
+    backgroundColor: colors.background,
+    borderColor: colors.line,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  clearHistoryText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  historyList: {
+    gap: 8,
+  },
+  historyItem: {
+    backgroundColor: colors.background,
+    borderColor: colors.line,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    gap: 5,
+    padding: 10,
+  },
+  historyItemHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'space-between',
+  },
+  historyText: {
+    color: colors.ink,
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '900',
+    lineHeight: 18,
+  },
+  historyTime: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  historyMeta: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 17,
+  },
+  historyEmpty: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

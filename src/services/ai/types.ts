@@ -23,6 +23,23 @@ export type ParsedAlertCommand = {
   confidence: number;
 };
 
+export type AICommandOrigin = 'text' | 'voice';
+
+export type AICommandStatus = 'detectado' | 'ejecutado' | 'fallido';
+
+export type AICommandHistoryEntry = {
+  id: string;
+  originalText: string;
+  intent: AIAssistantIntent;
+  category?: AlertCategory;
+  title?: string;
+  description?: string;
+  executedAction: string;
+  origin: AICommandOrigin;
+  createdAt: string;
+  status: AICommandStatus;
+};
+
 export type AIMessageContext = {
   sector?: string;
   userId?: string;
