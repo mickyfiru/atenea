@@ -5,12 +5,14 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AlertComposerModal } from '../components/AlertComposerModal';
+import { AIAssistantPanel } from '../components/AIAssistantPanel';
 import { AppHeader } from '../components/AppHeader';
 import { AteneaOrb } from '../components/AteneaOrb';
 import { QuickActionCard } from '../components/QuickActionCard';
 import { colors, radius } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 import { RootStackParamList } from '../navigation/types';
+import { AIAssistantIntent, ParsedAlertCommand } from '../services/ai/index';
 import { parseCommand } from '../services/commands';
 import { subscribeUserGroups } from '../services/groups';
 import { AlertCategory, CommunityGroup } from '../types/domain';
@@ -81,6 +83,7 @@ export function AteneaScreen() {
   const [groups, setGroups] = useState<CommunityGroup[]>([]);
   const [alertCategory, setAlertCategory] = useState<AlertCategory>('Seguridad');
   const [alertComposerVisible, setAlertComposerVisible] = useState(false);
+  const [alertDraft, setAlertDraft] = useState<ParsedAlertCommand>();
   const [commandText, setCommandText] = useState('');
   const [ateneaResponse, setAteneaResponse] = useState('');
 
@@ -145,6 +148,30 @@ export function AteneaScreen() {
     }
   }
 
+  function handleAssistantIntent(intent: AIAssistantIntent) {
+    switch (intent) {
+      case 'open_groups':
+        navigation.navigate('MainTabs', { screen: 'Groups' });
+        return;
+      case 'show_map':
+        navigation.navigate('Map');
+        return;
+      case 'call_emergency':
+        setAteneaResponse('Las llamadas reales todavia no estan activas.');
+        return;
+      case 'create_alert':
+      case 'unknown':
+        return;
+    }
+  }
+
+  function handleCreateAlertDraft(command: ParsedAlertCommand) {
+    setAlertDraft(command);
+    setAlertCategory(command.category ?? 'Seguridad');
+    setAteneaResponse('');
+    setAlertComposerVisible(true);
+  }
+
   return (
     <SafeAreaView edges={['left', 'right']} style={styles.safe}>
       <AppHeader title="ATENEA" subtitle="Tue, Jun 17 - River District" aiBadge showBell />
@@ -173,6 +200,11 @@ export function AteneaScreen() {
           </View>
         ) : null}
 
+        <AIAssistantPanel
+          onCreateAlertDraft={handleCreateAlertDraft}
+          onIntent={handleAssistantIntent}
+        />
+
         <View style={styles.quickBlock}>
           <Text style={styles.sectionTitle}>QUICK ACTIONS</Text>
           <View style={styles.quickGrid}>
@@ -186,6 +218,7 @@ export function AteneaScreen() {
                 backgroundColor={action.backgroundColor}
                 onPress={() => {
                   if (action.category) {
+                    setAlertDraft(undefined);
                     setAlertCategory(action.category);
                     setAlertComposerVisible(true);
                     return;
@@ -221,7 +254,13 @@ export function AteneaScreen() {
       <AlertComposerModal
         groups={groups}
         initialCategory={alertCategory}
-        onClose={() => setAlertComposerVisible(false)}
+        initialDescription={alertDraft?.description}
+        initialGroupId={alertDraft?.emergencyGroupId}
+        initialTitle={alertDraft?.title}
+        onClose={() => {
+          setAlertComposerVisible(false);
+          setAlertDraft(undefined);
+        }}
         userId={user?.uid}
         visible={alertComposerVisible}
       />

@@ -22,6 +22,9 @@ import { PrimaryButton } from './PrimaryButton';
 type AlertComposerModalProps = {
   groups: CommunityGroup[];
   initialCategory?: AlertCategory;
+  initialDescription?: string;
+  initialGroupId?: string;
+  initialTitle?: string;
   onClose: () => void;
   userId?: string;
   visible: boolean;
@@ -30,6 +33,9 @@ type AlertComposerModalProps = {
 export function AlertComposerModal({
   groups,
   initialCategory = 'Seguridad',
+  initialDescription = '',
+  initialGroupId = '',
+  initialTitle = '',
   onClose,
   userId,
   visible,
@@ -45,8 +51,11 @@ export function AlertComposerModal({
   useEffect(() => {
     if (visible) {
       setCategory(initialCategory);
+      setDescription(initialDescription);
+      setGroupId(initialGroupId);
+      setTitle(initialTitle);
     }
-  }, [initialCategory, visible]);
+  }, [initialCategory, initialDescription, initialGroupId, initialTitle, visible]);
 
   const selectedGroupId = groupId || groups[0]?.id || '';
 
