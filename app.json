@@ -58,7 +58,17 @@
           ]
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "ATENEA usa el microfono para convertir tus comandos de voz en texto.",
+          "speechRecognitionPermission": "ATENEA usa reconocimiento de voz para interpretar comandos comunitarios.",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
+        }
+      ]
     ],
     "extra": {
       "eas": {

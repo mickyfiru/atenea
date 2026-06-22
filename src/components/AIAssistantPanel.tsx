@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { colors, radius } from '../constants/theme';
+import { useVoiceCommand } from '../hooks/useVoiceCommand';
 import {
   AIAssistantIntent,
   ParsedAlertCommand,
@@ -24,8 +25,8 @@ export function AIAssistantPanel({ onCreateAlertDraft, onIntent }: AIAssistantPa
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  async function submit() {
-    const prompt = input.trim();
+  const submitPrompt = useCallback(async (promptText: string) => {
+    const prompt = promptText.trim();
 
     if (!prompt || loading) {
       return;
@@ -52,6 +53,27 @@ export function AIAssistantPanel({ onCreateAlertDraft, onIntent }: AIAssistantPa
     } finally {
       setLoading(false);
     }
+  }, [loading, onIntent]);
+
+  const voice = useVoiceCommand({
+    onFinalTranscript: async (text) => {
+      setInput(text);
+      await submitPrompt(text);
+    },
+  });
+
+  async function submit() {
+    await submitPrompt(input);
+  }
+
+  async function handleVoicePress() {
+    if (voice.listening) {
+      await voice.stop();
+      return;
+    }
+
+    voice.reset();
+    await voice.start();
   }
 
   const canCreateAlert = commandPreview?.intent === 'create_alert' && commandPreview.category;
@@ -60,6 +82,8 @@ export function AIAssistantPanel({ onCreateAlertDraft, onIntent }: AIAssistantPa
   const isUnknown = commandPreview?.intent === 'unknown';
   const tone = commandPreview?.category ? getAlertCategoryTone(commandPreview.category) : undefined;
   const emergency = getEmergencyDisplay(commandPreview);
+  const statusText = getVoiceStatusText(voice.listening, voice.processing);
+  const visibleError = error || voice.error;
 
   return (
     <View style={styles.card}>
@@ -73,7 +97,7 @@ export function AIAssistantPanel({ onCreateAlertDraft, onIntent }: AIAssistantPa
 
       <View style={styles.inputRow}>
         <TextInput
-          editable={!loading}
+          editable={!loading && !voice.processing}
           onChangeText={setInput}
           onSubmitEditing={submit}
           placeholder="Ej: Hay un accidente en avenida principal"
@@ -83,16 +107,37 @@ export function AIAssistantPanel({ onCreateAlertDraft, onIntent }: AIAssistantPa
           value={input}
         />
         <Pressable
-          disabled={loading || !input.trim()}
+          disabled={loading || voice.processing}
+          onPress={handleVoicePress}
+          style={[
+            styles.voiceButton,
+            voice.listening && styles.voiceButtonActive,
+            (loading || voice.processing) && styles.sendButtonDisabled,
+          ]}
+        >
+          <Ionicons
+            name={voice.listening ? 'mic' : 'mic-outline'}
+            size={19}
+            color={voice.listening ? colors.background : colors.primary}
+          />
+        </Pressable>
+        <Pressable
+          disabled={loading || voice.processing || !input.trim()}
           onPress={submit}
-          style={[styles.sendButton, (!input.trim() || loading) && styles.sendButtonDisabled]}
+          style={[styles.sendButton, (!input.trim() || loading || voice.processing) && styles.sendButtonDisabled]}
         >
           <Ionicons name="send-outline" size={19} color={colors.background} />
         </Pressable>
       </View>
 
+      <Text style={[styles.voiceStatus, voice.listening && styles.voiceStatusActive]}>
+        {statusText}
+      </Text>
+
+      {voice.transcript ? <Text style={styles.transcript}>Escuche: {voice.transcript}</Text> : null}
+
       {response ? <Text style={styles.response}>{response}</Text> : null}
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {visibleError ? <Text style={styles.error}>{visibleError}</Text> : null}
 
       {canCreateAlert && commandPreview ? (
         <View style={styles.previewCard}>
@@ -169,6 +214,18 @@ export function AIAssistantPanel({ onCreateAlertDraft, onIntent }: AIAssistantPa
       ) : null}
     </View>
   );
+}
+
+function getVoiceStatusText(listening: boolean, processing: boolean) {
+  if (processing) {
+    return 'Procesando comando...';
+  }
+
+  if (listening) {
+    return 'Escuchando...';
+  }
+
+  return 'Hablar';
 }
 
 function getSpokenResponse(command?: ParsedAlertCommand) {
@@ -280,8 +337,33 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 38,
   },
+  voiceButton: {
+    alignItems: 'center',
+    backgroundColor: colors.primarySoft,
+    borderRadius: 19,
+    height: 38,
+    justifyContent: 'center',
+    width: 38,
+  },
+  voiceButtonActive: {
+    backgroundColor: colors.primary,
+  },
   sendButtonDisabled: {
     opacity: 0.45,
+  },
+  voiceStatus: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  voiceStatusActive: {
+    color: colors.primary,
+  },
+  transcript: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
   },
   response: {
     color: '#263D5C',
