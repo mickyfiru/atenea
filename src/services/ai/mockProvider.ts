@@ -71,7 +71,24 @@ function getEmergencyCall(normalized: string): EmergencyGroupId | undefined {
   return undefined;
 }
 
+function isEmergencyContactsCommand(normalized: string) {
+  return /\b(contactos sos|contactos de emergencia|abrir emergencia|abrir contactos)\b/.test(normalized);
+}
+
 const ALERT_MATCHES: AlertMatch[] = [
+  {
+    pattern: /\b(crear alerta de emergencia|reporte de emergencia|emergency report)\b/,
+    category: 'Seguridad',
+    title: 'Reporte de emergencia',
+    emergencyGroupId: 'default-police',
+    confidence: 0.8,
+  },
+  {
+    pattern: /\b(hay un incidente|incidente en mi zona|reporte de incidente|incident report)\b/,
+    category: 'Comunidad',
+    title: 'Incidente reportado',
+    confidence: 0.72,
+  },
   {
     pattern: /\b(hay un robo|hay robo|me robaron|robo|asalto)\b/,
     category: 'Seguridad',
@@ -196,6 +213,13 @@ export async function parseMockAlertCommand(text: string): Promise<ParsedAlertCo
       intent: 'call_emergency',
       emergencyGroupId,
       confidence: 0.86,
+    };
+  }
+
+  if (isEmergencyContactsCommand(normalized)) {
+    return {
+      intent: 'call_emergency',
+      confidence: 0.76,
     };
   }
 

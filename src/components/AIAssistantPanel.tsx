@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useCallback, useEffect, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { colors, radius } from '../constants/theme';
@@ -38,7 +38,19 @@ type AIAssistantPanelProps = {
   ) => Promise<boolean> | boolean;
 };
 
-export function AIAssistantPanel({ onCreateAlertDraft, onIntent }: AIAssistantPanelProps) {
+export type AIAssistantPanelHandle = {
+  runQuickActionCommand: (prompt: string, spokenResponse?: string) => Promise<void>;
+  showLocalSummary: (input: {
+    prompt: string;
+    response: string;
+    status: AICommandStatus;
+    executedAction: string;
+    spokenResponse: string;
+  }) => Promise<void>;
+};
+
+export const AIAssistantPanel = forwardRef<AIAssistantPanelHandle, AIAssistantPanelProps>(
+function AIAssistantPanel({ onCreateAlertDraft, onIntent }, ref) {
   const [input, setInput] = useState('');
   const [response, setResponse] = useState('');
   const [commandPreview, setCommandPreview] = useState<ParsedAlertCommand>();
@@ -56,7 +68,11 @@ export function AIAssistantPanel({ onCreateAlertDraft, onIntent }: AIAssistantPa
     setHistory(nextHistory);
   }
 
-  const submitPrompt = useCallback(async (promptText: string, origin: AICommandOrigin) => {
+  const submitPrompt = useCallback(async (
+    promptText: string,
+    origin: AICommandOrigin,
+    spokenResponse?: string,
+  ) => {
     const prompt = promptText.trim();
 
     if (!prompt || loading) {
@@ -85,7 +101,7 @@ export function AIAssistantPanel({ onCreateAlertDraft, onIntent }: AIAssistantPa
       setCommandHistoryId(historyEntry.id);
       setHistory(nextHistory);
       setInput('');
-      await speak(getSpokenResponse(nextCommand));
+      await speak(spokenResponse ?? getSpokenResponse(nextCommand));
 
       if (nextCommand?.intent === 'open_groups' || nextCommand?.intent === 'show_map') {
         const executed = await Promise.resolve(onIntent?.(nextCommand.intent, nextCommand, historyEntry.id));
@@ -114,6 +130,31 @@ export function AIAssistantPanel({ onCreateAlertDraft, onIntent }: AIAssistantPa
     }
   }, [loading, onIntent]);
 
+  useImperativeHandle(ref, () => ({
+    runQuickActionCommand: (prompt, spokenResponse) =>
+      submitPrompt(prompt, 'quick_action', spokenResponse),
+    async showLocalSummary({ prompt, response: nextResponse, status, executedAction, spokenResponse }) {
+      const historyEntry = buildHistoryEntry({
+        prompt,
+        origin: 'quick_action',
+        status,
+        executedAction,
+        command: {
+          intent: 'show_summary',
+          confidence: status === 'fallido' ? 0.3 : 0.8,
+        },
+      });
+      const nextHistory = await saveAICommandHistory(historyEntry);
+
+      setError('');
+      setCommandPreview(undefined);
+      setCommandHistoryId(historyEntry.id);
+      setHistory(nextHistory);
+      setResponse(nextResponse);
+      await speak(spokenResponse);
+    },
+  }), [submitPrompt]);
+
   const voice = useVoiceCommand({
     onFinalTranscript: async (text) => {
       setInput(text);
@@ -140,8 +181,36 @@ export function AIAssistantPanel({ onCreateAlertDraft, onIntent }: AIAssistantPa
     setHistory([]);
   }
 
+  async function handleEmergencyOption(
+    command: ParsedAlertCommand,
+    emergencyGroupId?: ParsedAlertCommand['emergencyGroupId'],
+  ) {
+    const executed = await Promise.resolve(
+      onIntent?.(
+        command.intent,
+        {
+          ...command,
+          emergencyGroupId,
+        },
+        commandHistoryId,
+      ),
+    );
+
+    if (!commandHistoryId) {
+      return;
+    }
+
+    const nextHistory = await updateAICommandHistoryStatus(
+      commandHistoryId,
+      executed === false ? 'fallido' : 'ejecutado',
+      executed === false ? 'grupo_emergencia_no_encontrado' : 'grupo_emergencia_abierto',
+    );
+    setHistory(nextHistory);
+  }
+
   const canCreateAlert = commandPreview?.intent === 'create_alert' && commandPreview.category;
   const isEmergency = commandPreview?.intent === 'call_emergency';
+  const showEmergencyOptions = isEmergency && !commandPreview?.emergencyGroupId;
   const isNavigation = commandPreview?.intent === 'open_groups' || commandPreview?.intent === 'show_map';
   const isUnknown = commandPreview?.intent === 'unknown';
   const tone = commandPreview?.category ? getAlertCategoryTone(commandPreview.category) : undefined;
@@ -264,29 +333,31 @@ export function AIAssistantPanel({ onCreateAlertDraft, onIntent }: AIAssistantPa
             </View>
           </View>
           <Text style={styles.previewDescription}>
-            Puedo abrir el grupo de emergencia para coordinar la alerta.
+            {showEmergencyOptions
+              ? 'Elige un contacto SOS para abrir su grupo de emergencia.'
+              : 'Puedo abrir el grupo de emergencia para coordinar la alerta.'}
           </Text>
-          <PrimaryButton
-            label="Abrir grupo"
-            onPress={async () => {
-              const executed = await Promise.resolve(
-                onIntent?.(commandPreview.intent, commandPreview, commandHistoryId),
-              );
-
-              if (!commandHistoryId) {
-                return;
-              }
-
-              const nextHistory = await updateAICommandHistoryStatus(
-                commandHistoryId,
-                executed === false ? 'fallido' : 'ejecutado',
-                executed === false ? 'grupo_emergencia_no_encontrado' : 'grupo_emergencia_abierto',
-              );
-              setHistory(nextHistory);
-            }}
-            style={styles.previewButton}
-            variant="light"
-          />
+          {showEmergencyOptions ? (
+            <View style={styles.emergencyOptions}>
+              {EMERGENCY_OPTIONS.map((option) => (
+                <Pressable
+                  key={option.groupId}
+                  onPress={() => handleEmergencyOption(commandPreview, option.groupId)}
+                  style={styles.emergencyOption}
+                >
+                  <Ionicons name={option.icon} size={18} color={option.color} />
+                  <Text style={styles.emergencyOptionText}>{option.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : (
+            <PrimaryButton
+              label="Abrir grupo"
+              onPress={() => handleEmergencyOption(commandPreview, commandPreview.emergencyGroupId)}
+              style={styles.previewButton}
+              variant="light"
+            />
+          )}
         </View>
       ) : null}
 
@@ -337,11 +408,28 @@ export function AIAssistantPanel({ onCreateAlertDraft, onIntent }: AIAssistantPa
                   <Text numberOfLines={2} style={styles.historyText}>
                     {entry.originalText}
                   </Text>
-                  <Text style={styles.historyTime}>{formatHistoryTime(entry.createdAt)}</Text>
+                  <View style={styles.historySide}>
+                    <Text style={styles.historyTime}>{formatHistoryTime(entry.createdAt)}</Text>
+                    <View
+                      style={[
+                        styles.statusBadge,
+                        { backgroundColor: getHistoryStatusTone(entry.status).backgroundColor },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.statusBadgeText,
+                          { color: getHistoryStatusTone(entry.status).color },
+                        ]}
+                      >
+                        {entry.status}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
                 <Text style={styles.historyMeta}>
                   {formatIntent(entry.intent)}
-                  {entry.category ? ` / ${entry.category}` : ''} · {entry.origin === 'voice' ? 'voz' : 'texto'} · {entry.status}
+                  {entry.category ? ` / ${entry.category}` : ''} · {formatOrigin(entry.origin)}
                 </Text>
               </View>
             ))}
@@ -352,7 +440,28 @@ export function AIAssistantPanel({ onCreateAlertDraft, onIntent }: AIAssistantPa
       </View>
     </View>
   );
-}
+});
+
+const EMERGENCY_OPTIONS = [
+  {
+    label: 'Bomberos',
+    groupId: 'default-firefighters' as const,
+    icon: 'flame-outline' as const,
+    color: colors.danger,
+  },
+  {
+    label: 'Ambulancia',
+    groupId: 'default-ambulance' as const,
+    icon: 'pulse-outline' as const,
+    color: colors.success,
+  },
+  {
+    label: 'Policia',
+    groupId: 'default-police' as const,
+    icon: 'shield-checkmark-outline' as const,
+    color: colors.primary,
+  },
+];
 
 function buildHistoryEntry({
   prompt,
@@ -399,6 +508,8 @@ function getInitialExecutedAction(command?: ParsedAlertCommand) {
       return 'preparar_navegacion_grupos';
     case 'show_map':
       return 'preparar_navegacion_mapa';
+    case 'show_summary':
+      return 'preparar_resumen';
     case 'unknown':
     default:
       return 'sin_accion';
@@ -415,8 +526,22 @@ function formatIntent(intent: AIAssistantIntent) {
       return 'grupos';
     case 'show_map':
       return 'mapa';
+    case 'show_summary':
+      return 'resumen';
     case 'unknown':
       return 'desconocido';
+  }
+}
+
+function formatOrigin(origin: AICommandOrigin) {
+  switch (origin) {
+    case 'voice':
+      return 'voz';
+    case 'quick_action':
+      return 'quick action';
+    case 'text':
+    default:
+      return 'texto';
   }
 }
 
@@ -425,6 +550,27 @@ function formatHistoryTime(createdAt: string) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(createdAt));
+}
+
+function getHistoryStatusTone(status: AICommandStatus) {
+  switch (status) {
+    case 'ejecutado':
+      return {
+        color: colors.success,
+        backgroundColor: colors.successSoft,
+      };
+    case 'fallido':
+      return {
+        color: colors.danger,
+        backgroundColor: colors.dangerSoft,
+      };
+    case 'detectado':
+    default:
+      return {
+        color: colors.primary,
+        backgroundColor: colors.primarySoft,
+      };
+  }
 }
 
 function getVoiceStatusText(listening: boolean, processing: boolean) {
@@ -449,6 +595,8 @@ function getSpokenResponse(command?: ParsedAlertCommand) {
       return 'Abriendo grupos.';
     case 'show_map':
       return 'Abriendo mapa.';
+    case 'show_summary':
+      return 'Resumen de tu zona preparado.';
     case 'unknown':
     default:
       return 'No entend\u00ed el comando.';
@@ -558,6 +706,8 @@ const styles = StyleSheet.create({
   },
   voiceButtonActive: {
     backgroundColor: colors.primary,
+    borderColor: colors.primaryDark,
+    borderWidth: 2,
   },
   sendButtonDisabled: {
     opacity: 0.45,
@@ -569,6 +719,7 @@ const styles = StyleSheet.create({
   },
   voiceStatusActive: {
     color: colors.primary,
+    fontSize: 13,
   },
   transcript: {
     color: colors.text,
@@ -642,6 +793,25 @@ const styles = StyleSheet.create({
   },
   previewButton: {
     minHeight: 44,
+  },
+  emergencyOptions: {
+    gap: 8,
+  },
+  emergencyOption: {
+    alignItems: 'center',
+    backgroundColor: colors.soft,
+    borderColor: colors.line,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 8,
+    minHeight: 44,
+    paddingHorizontal: 12,
+  },
+  emergencyOptionText: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: '900',
   },
   unknownCard: {
     alignItems: 'center',
@@ -717,6 +887,20 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 11,
     fontWeight: '900',
+  },
+  historySide: {
+    alignItems: 'flex-end',
+    gap: 5,
+  },
+  statusBadge: {
+    borderRadius: radius.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  statusBadgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase',
   },
   historyMeta: {
     color: colors.muted,

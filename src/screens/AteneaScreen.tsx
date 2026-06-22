@@ -1,11 +1,10 @@
-import { Ionicons } from '@expo/vector-icons';
 import { NavigationProp, useNavigation } from '@react-navigation/native';
-import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AlertComposerModal } from '../components/AlertComposerModal';
-import { AIAssistantPanel } from '../components/AIAssistantPanel';
+import { AIAssistantPanel, AIAssistantPanelHandle } from '../components/AIAssistantPanel';
 import { AppHeader } from '../components/AppHeader';
 import { AteneaOrb } from '../components/AteneaOrb';
 import { QuickActionCard } from '../components/QuickActionCard';
@@ -13,9 +12,9 @@ import { colors, radius } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 import { RootStackParamList } from '../navigation/types';
 import { AIAssistantIntent, ParsedAlertCommand } from '../services/ai/index';
-import { parseCommand } from '../services/commands';
+import { subscribeAlertsForGroups } from '../services/alerts';
 import { getGroupById, subscribeUserGroups } from '../services/groups';
-import { AlertCategory, CommunityGroup } from '../types/domain';
+import { AlertCategory, CommunityAlert, CommunityGroup } from '../types/domain';
 
 const suggestions = ['"What happened today?"', '"Call an ambulance"', '"Start recording"'];
 const helpResponse = `Puedo ayudarte con:
@@ -48,22 +47,23 @@ const quickActions = [
   {
     title: 'Emergency',
     subtitle: 'Report',
+    kind: 'emergency_report',
     icon: 'warning-outline' as const,
     color: colors.danger,
     backgroundColor: colors.dangerSoft,
-    category: 'Seguridad' as AlertCategory,
   },
   {
     title: 'Incident',
     subtitle: 'Report',
+    kind: 'incident_report',
     icon: 'alert-circle-outline' as const,
     color: colors.warning,
     backgroundColor: colors.warningSoft,
-    category: 'Comunidad' as AlertCategory,
   },
   {
-    title: 'Call 911',
-    subtitle: 'Direct',
+    title: 'Contactos',
+    subtitle: 'SOS',
+    kind: 'sos',
     icon: 'call-outline' as const,
     color: colors.danger,
     backgroundColor: colors.dangerSoft,
@@ -71,16 +71,60 @@ const quickActions = [
   {
     title: 'Summarize',
     subtitle: 'My area',
+    kind: 'summary',
     icon: 'document-text-outline' as const,
     color: colors.primary,
     backgroundColor: colors.primarySoft,
   },
 ];
 
+function buildLocalSummary(alerts: CommunityAlert[]) {
+  const activeAlerts = alerts.slice(0, 50);
+
+  if (!activeAlerts.length) {
+    return {
+      prompt: 'resumir mi sector',
+      response: 'No encontré suficientes alertas cercanas para resumir.',
+      status: 'fallido' as const,
+      executedAction: 'resumen_sin_datos',
+      spokenResponse: 'No encontré suficientes alertas cercanas para resumir.',
+    };
+  }
+
+  const counts = activeAlerts.reduce<Record<AlertCategory, number>>(
+    (accumulator, alert) => {
+      accumulator[alert.category] += 1;
+      return accumulator;
+    },
+    {
+      Seguridad: 0,
+      'Tr\u00e1nsito': 0,
+      Comunidad: 0,
+      Servicios: 0,
+    },
+  );
+
+  return {
+    prompt: 'resumir mi sector',
+    response: [
+      `Hay ${activeAlerts.length} alertas activas:`,
+      `${counts.Seguridad} de seguridad`,
+      `${counts['Tr\u00e1nsito']} de tránsito`,
+      `${counts.Comunidad} de comunidad`,
+      `${counts.Servicios} de servicios.`,
+    ].join(' '),
+    status: 'ejecutado' as const,
+    executedAction: 'resumen_local_generado',
+    spokenResponse: 'Resumen de tu zona preparado.',
+  };
+}
+
 export function AteneaScreen() {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const { user } = useAuth();
+  const aiPanelRef = useRef<AIAssistantPanelHandle>(null);
   const [groups, setGroups] = useState<CommunityGroup[]>([]);
+  const [alerts, setAlerts] = useState<CommunityAlert[]>([]);
   const [alertCategory, setAlertCategory] = useState<AlertCategory>('Seguridad');
   const [alertComposerVisible, setAlertComposerVisible] = useState(false);
   const [alertDraft, setAlertDraft] = useState<ParsedAlertCommand>();
@@ -88,7 +132,6 @@ export function AteneaScreen() {
     onCreated: () => Promise<void>;
     onCreateFailed: () => Promise<void>;
   }>();
-  const [commandText, setCommandText] = useState('');
   const [ateneaResponse, setAteneaResponse] = useState('');
 
   useEffect(() => {
@@ -99,58 +142,19 @@ export function AteneaScreen() {
     return subscribeUserGroups(user.uid, setGroups, () => undefined);
   }, [user]);
 
-  function handleSubmitCommand() {
-    const parsedCommand = parseCommand(commandText);
-
-    if (!commandText.trim()) {
-      setAteneaResponse(unknownResponse);
-      return;
+  useEffect(() => {
+    if (!user || !groups.length) {
+      setAlerts([]);
+      return undefined;
     }
 
-    setCommandText('');
-
-    switch (parsedCommand.intent) {
-      case 'CREATE_ALERT':
-        setAlertCategory('Seguridad');
-        setAlertComposerVisible(true);
-        setAteneaResponse('');
-        return;
-      case 'OPEN_GROUPS':
-        navigation.navigate('MainTabs', { screen: 'Groups' });
-        setAteneaResponse('');
-        return;
-      case 'OPEN_ALERTS':
-        navigation.navigate('Alerts');
-        setAteneaResponse('');
-        return;
-      case 'OPEN_SUMMARY':
-        navigation.navigate('Summary');
-        setAteneaResponse('');
-        return;
-      case 'OPEN_MAP':
-        navigation.navigate('Map');
-        setAteneaResponse('');
-        return;
-      case 'OPEN_LOCATION':
-        navigation.navigate('LocationSettings');
-        setAteneaResponse('');
-        return;
-      case 'OPEN_SOUND_SETTINGS':
-        navigation.navigate('SoundSettings');
-        setAteneaResponse('');
-        return;
-      case 'OPEN_PROFILE':
-        navigation.navigate('MainTabs', { screen: 'Profile' });
-        setAteneaResponse('');
-        return;
-      case 'HELP':
-        setAteneaResponse(helpResponse);
-        return;
-      case 'UNKNOWN':
-        setAteneaResponse(unknownResponse);
-        return;
-    }
-  }
+    return subscribeAlertsForGroups(
+      groups.map((group) => group.id),
+      setAlerts,
+      () => undefined,
+      user.uid,
+    );
+  }, [groups, user]);
 
   async function handleAssistantIntent(intent: AIAssistantIntent, command?: ParsedAlertCommand) {
     switch (intent) {
@@ -176,6 +180,7 @@ export function AteneaScreen() {
         setAteneaResponse('Las llamadas reales todavia no estan activas.');
         return false;
       case 'create_alert':
+      case 'show_summary':
       case 'unknown':
         return false;
     }
@@ -194,6 +199,32 @@ export function AteneaScreen() {
     setAlertCategory(command.category ?? 'Seguridad');
     setAteneaResponse('');
     setAlertComposerVisible(true);
+  }
+
+  async function handleQuickAction(kind: string) {
+    switch (kind) {
+      case 'emergency_report':
+        await aiPanelRef.current?.runQuickActionCommand(
+          'crear alerta de emergencia',
+          'Preparé un reporte de emergencia.',
+        );
+        return;
+      case 'incident_report':
+        await aiPanelRef.current?.runQuickActionCommand(
+          'hay un incidente en mi zona',
+          'Preparé un reporte de incidente.',
+        );
+        return;
+      case 'sos':
+        await aiPanelRef.current?.runQuickActionCommand(
+          'contactos sos',
+          'Abriendo contactos de emergencia.',
+        );
+        return;
+      case 'summary':
+        await aiPanelRef.current?.showLocalSummary(buildLocalSummary(alerts));
+        return;
+    }
   }
 
   return (
@@ -225,6 +256,7 @@ export function AteneaScreen() {
         ) : null}
 
         <AIAssistantPanel
+          ref={aiPanelRef}
           onCreateAlertDraft={handleCreateAlertDraft}
           onIntent={handleAssistantIntent}
         />
@@ -241,16 +273,7 @@ export function AteneaScreen() {
                 color={action.color}
                 backgroundColor={action.backgroundColor}
                 onPress={() => {
-                  if (action.category) {
-                    setAlertDraft(undefined);
-                    setAlertCategory(action.category);
-                    setAlertComposerVisible(true);
-                    return;
-                  }
-
-                  if (action.title === 'Summarize') {
-                    navigation.navigate('Summary');
-                  }
+                  void handleQuickAction(action.kind);
                 }}
               />
             ))}
@@ -258,23 +281,6 @@ export function AteneaScreen() {
         </View>
 
       </ScrollView>
-      <View style={styles.inputBar}>
-        <TextInput
-          onChangeText={setCommandText}
-          onSubmitEditing={handleSubmitCommand}
-          placeholder="Ask Atenea anything..."
-          placeholderTextColor={colors.muted}
-          returnKeyType="send"
-          style={styles.input}
-          value={commandText}
-        />
-        <Pressable style={styles.micButton}>
-          <Ionicons name="mic-outline" size={24} color={colors.primary} />
-        </Pressable>
-        <Pressable onPress={handleSubmitCommand} style={styles.sendButton}>
-          <Ionicons name="paper-plane-outline" size={24} color={colors.background} />
-        </Pressable>
-      </View>
       <AlertComposerModal
         groups={groups}
         initialCategory={alertCategory}
@@ -306,7 +312,7 @@ const styles = StyleSheet.create({
   },
   content: {
     alignItems: 'center',
-    paddingBottom: 222,
+    paddingBottom: 132,
     paddingHorizontal: 24,
   },
   heroCopy: {
@@ -371,42 +377,5 @@ const styles = StyleSheet.create({
   quickGrid: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-  },
-  inputBar: {
-    alignItems: 'center',
-    borderColor: '#DCE5F2',
-    borderRadius: 22,
-    borderWidth: 1.5,
-    backgroundColor: colors.background,
-    bottom: 82,
-    flexDirection: 'row',
-    gap: 12,
-    minHeight: 72,
-    paddingHorizontal: 16,
-    position: 'absolute',
-    left: 24,
-    right: 24,
-  },
-  input: {
-    color: colors.ink,
-    flex: 1,
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  micButton: {
-    alignItems: 'center',
-    backgroundColor: colors.primarySoft,
-    borderRadius: 25,
-    height: 50,
-    justifyContent: 'center',
-    width: 50,
-  },
-  sendButton: {
-    alignItems: 'center',
-    backgroundColor: colors.primary,
-    borderRadius: 25,
-    height: 50,
-    justifyContent: 'center',
-    width: 50,
   },
 });

@@ -7,6 +7,7 @@ export type AIAssistantIntent =
   | 'open_groups'
   | 'show_map'
   | 'call_emergency'
+  | 'show_summary'
   | 'unknown';
 
 export type EmergencyGroupId =
@@ -23,7 +24,7 @@ export type ParsedAlertCommand = {
   confidence: number;
 };
 
-export type AICommandOrigin = 'text' | 'voice';
+export type AICommandOrigin = 'text' | 'voice' | 'quick_action';
 
 export type AICommandStatus = 'detectado' | 'ejecutado' | 'fallido';
 
