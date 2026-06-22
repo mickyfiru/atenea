@@ -26,6 +26,8 @@ type AlertComposerModalProps = {
   initialGroupId?: string;
   initialTitle?: string;
   onClose: () => void;
+  onCreateFailed?: () => void;
+  onCreated?: () => void;
   userId?: string;
   visible: boolean;
 };
@@ -37,6 +39,8 @@ export function AlertComposerModal({
   initialGroupId = '',
   initialTitle = '',
   onClose,
+  onCreateFailed,
+  onCreated,
   userId,
   visible,
 }: AlertComposerModalProps) {
@@ -102,6 +106,7 @@ export function AlertComposerModal({
         mediaUrl,
         mediaType: mediaUrl ? getAlertMediaType(media) : '',
       });
+      onCreated?.();
       setTitle('');
       setDescription('');
       setGroupId('');
@@ -114,6 +119,7 @@ export function AlertComposerModal({
 
       onClose();
     } catch (submitError) {
+      onCreateFailed?.();
       setError(submitError instanceof Error ? submitError.message : 'No pudimos crear la alerta.');
     } finally {
       setSaving(false);

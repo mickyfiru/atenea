@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { AICommandHistoryEntry } from './types';
+import { AICommandHistoryEntry, AICommandStatus } from './types';
 
 const AI_COMMAND_HISTORY_KEY = '@atenea/ai-command-history';
 const MAX_HISTORY_ITEMS = 10;
@@ -57,6 +57,36 @@ export async function saveAICommandHistory(entry: AICommandHistoryEntry) {
     return nextHistory;
   } catch (error) {
     console.warn('[ai-history] could not save local command history', error);
+    return getAICommandHistory();
+  }
+}
+
+export async function updateAICommandHistoryStatus(
+  id: string,
+  status: AICommandStatus,
+  actionExecuted?: string,
+) {
+  try {
+    const currentHistory = await getAICommandHistory();
+    const nextHistory = limitHistoryToLast10(
+      currentHistory.map((entry) => {
+        if (entry.id !== id) {
+          return entry;
+        }
+
+        return {
+          ...entry,
+          status,
+          executedAction: actionExecuted ?? entry.executedAction,
+        };
+      }),
+    );
+
+    await AsyncStorage.setItem(AI_COMMAND_HISTORY_KEY, JSON.stringify(nextHistory));
+
+    return nextHistory;
+  } catch (error) {
+    console.warn('[ai-history] could not update local command history', error);
     return getAICommandHistory();
   }
 }

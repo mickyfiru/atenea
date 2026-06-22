@@ -14,7 +14,7 @@ import { useAuth } from '../context/AuthContext';
 import { RootStackParamList } from '../navigation/types';
 import { AIAssistantIntent, ParsedAlertCommand } from '../services/ai/index';
 import { parseCommand } from '../services/commands';
-import { subscribeUserGroups } from '../services/groups';
+import { getGroupById, subscribeUserGroups } from '../services/groups';
 import { AlertCategory, CommunityGroup } from '../types/domain';
 
 const suggestions = ['"What happened today?"', '"Call an ambulance"', '"Start recording"'];
@@ -84,6 +84,10 @@ export function AteneaScreen() {
   const [alertCategory, setAlertCategory] = useState<AlertCategory>('Seguridad');
   const [alertComposerVisible, setAlertComposerVisible] = useState(false);
   const [alertDraft, setAlertDraft] = useState<ParsedAlertCommand>();
+  const [alertDraftCallbacks, setAlertDraftCallbacks] = useState<{
+    onCreated: () => Promise<void>;
+    onCreateFailed: () => Promise<void>;
+  }>();
   const [commandText, setCommandText] = useState('');
   const [ateneaResponse, setAteneaResponse] = useState('');
 
@@ -148,30 +152,45 @@ export function AteneaScreen() {
     }
   }
 
-  function handleAssistantIntent(intent: AIAssistantIntent, command?: ParsedAlertCommand) {
+  async function handleAssistantIntent(intent: AIAssistantIntent, command?: ParsedAlertCommand) {
     switch (intent) {
       case 'open_groups':
         navigation.navigate('MainTabs', { screen: 'Groups' });
-        return;
+        return true;
       case 'show_map':
         navigation.navigate('Map');
-        return;
+        return true;
       case 'call_emergency':
         if (command?.emergencyGroupId) {
-          navigation.navigate('Chat', { groupId: command.emergencyGroupId });
-          return;
+          const emergencyGroup = await getGroupById(command.emergencyGroupId);
+
+          if (emergencyGroup) {
+            navigation.navigate('Chat', { groupId: command.emergencyGroupId });
+            return true;
+          }
+
+          setAteneaResponse('No encontramos ese grupo de emergencia todavia.');
+          return false;
         }
 
         setAteneaResponse('Las llamadas reales todavia no estan activas.');
-        return;
+        return false;
       case 'create_alert':
       case 'unknown':
-        return;
+        return false;
     }
   }
 
-  function handleCreateAlertDraft(command: ParsedAlertCommand) {
+  function handleCreateAlertDraft(
+    command: ParsedAlertCommand,
+    _historyEntryId?: string,
+    callbacks?: {
+      onCreated: () => Promise<void>;
+      onCreateFailed: () => Promise<void>;
+    },
+  ) {
     setAlertDraft(command);
+    setAlertDraftCallbacks(callbacks);
     setAlertCategory(command.category ?? 'Seguridad');
     setAteneaResponse('');
     setAlertComposerVisible(true);
@@ -265,6 +284,13 @@ export function AteneaScreen() {
         onClose={() => {
           setAlertComposerVisible(false);
           setAlertDraft(undefined);
+          setAlertDraftCallbacks(undefined);
+        }}
+        onCreateFailed={() => {
+          void alertDraftCallbacks?.onCreateFailed();
+        }}
+        onCreated={() => {
+          void alertDraftCallbacks?.onCreated();
         }}
         userId={user?.uid}
         visible={alertComposerVisible}

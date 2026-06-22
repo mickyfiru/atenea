@@ -16,20 +16,33 @@ import {
   clearAICommandHistory,
   getAICommandHistory,
   saveAICommandHistory,
+  updateAICommandHistoryStatus,
 } from '../services/ai/aiHistory';
 import { speak } from '../services/voice/tts';
 import { getAlertCategoryTone } from '../utils/alerts';
 import { PrimaryButton } from './PrimaryButton';
 
 type AIAssistantPanelProps = {
-  onCreateAlertDraft?: (command: ParsedAlertCommand) => void;
-  onIntent?: (intent: AIAssistantIntent, command?: ParsedAlertCommand) => void;
+  onCreateAlertDraft?: (
+    command: ParsedAlertCommand,
+    historyEntryId?: string,
+    callbacks?: {
+      onCreated: () => Promise<void>;
+      onCreateFailed: () => Promise<void>;
+    },
+  ) => void;
+  onIntent?: (
+    intent: AIAssistantIntent,
+    command?: ParsedAlertCommand,
+    historyEntryId?: string,
+  ) => Promise<boolean> | boolean;
 };
 
 export function AIAssistantPanel({ onCreateAlertDraft, onIntent }: AIAssistantPanelProps) {
   const [input, setInput] = useState('');
   const [response, setResponse] = useState('');
   const [commandPreview, setCommandPreview] = useState<ParsedAlertCommand>();
+  const [commandHistoryId, setCommandHistoryId] = useState<string>();
   const [history, setHistory] = useState<AICommandHistoryEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -53,27 +66,35 @@ export function AIAssistantPanel({ onCreateAlertDraft, onIntent }: AIAssistantPa
     setLoading(true);
     setError('');
     setCommandPreview(undefined);
+    setCommandHistoryId(undefined);
 
     try {
       const nextResponse = await sendMessage(prompt);
       const nextCommand = nextResponse.parsedCommand;
-      const nextHistory = await saveAICommandHistory(
-        buildHistoryEntry({
-          prompt,
-          command: nextCommand,
-          origin,
-          status: getCommandStatus(nextCommand),
-        }),
-      );
+      const historyEntry = buildHistoryEntry({
+        prompt,
+        command: nextCommand,
+        origin,
+        status: getCommandStatus(nextCommand),
+        executedAction: getInitialExecutedAction(nextCommand),
+      });
+      let nextHistory = await saveAICommandHistory(historyEntry);
 
       setResponse(nextResponse.text);
       setCommandPreview(nextCommand);
+      setCommandHistoryId(historyEntry.id);
       setHistory(nextHistory);
       setInput('');
       await speak(getSpokenResponse(nextCommand));
 
       if (nextCommand?.intent === 'open_groups' || nextCommand?.intent === 'show_map') {
-        onIntent?.(nextCommand.intent, nextCommand);
+        const executed = await Promise.resolve(onIntent?.(nextCommand.intent, nextCommand, historyEntry.id));
+        nextHistory = await updateAICommandHistoryStatus(
+          historyEntry.id,
+          executed === false ? 'fallido' : 'ejecutado',
+          nextCommand.intent === 'open_groups' ? 'navegacion_grupos' : 'navegacion_mapa',
+        );
+        setHistory(nextHistory);
       }
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : 'Atenea no pudo responder.';
@@ -198,7 +219,34 @@ export function AIAssistantPanel({ onCreateAlertDraft, onIntent }: AIAssistantPa
           <Text style={styles.previewDescription}>{commandPreview.description}</Text>
           <PrimaryButton
             label="Crear alerta"
-            onPress={() => onCreateAlertDraft?.(commandPreview)}
+            onPress={() => {
+              onCreateAlertDraft?.(commandPreview, commandHistoryId, {
+                onCreated: async () => {
+                  if (!commandHistoryId) {
+                    return;
+                  }
+
+                  const nextHistory = await updateAICommandHistoryStatus(
+                    commandHistoryId,
+                    'ejecutado',
+                    'alerta_creada',
+                  );
+                  setHistory(nextHistory);
+                },
+                onCreateFailed: async () => {
+                  if (!commandHistoryId) {
+                    return;
+                  }
+
+                  const nextHistory = await updateAICommandHistoryStatus(
+                    commandHistoryId,
+                    'fallido',
+                    'error_creando_alerta',
+                  );
+                  setHistory(nextHistory);
+                },
+              });
+            }}
             style={styles.previewButton}
           />
         </View>
@@ -220,7 +268,22 @@ export function AIAssistantPanel({ onCreateAlertDraft, onIntent }: AIAssistantPa
           </Text>
           <PrimaryButton
             label="Abrir grupo"
-            onPress={() => onIntent?.(commandPreview.intent, commandPreview)}
+            onPress={async () => {
+              const executed = await Promise.resolve(
+                onIntent?.(commandPreview.intent, commandPreview, commandHistoryId),
+              );
+
+              if (!commandHistoryId) {
+                return;
+              }
+
+              const nextHistory = await updateAICommandHistoryStatus(
+                commandHistoryId,
+                executed === false ? 'fallido' : 'ejecutado',
+                executed === false ? 'grupo_emergencia_no_encontrado' : 'grupo_emergencia_abierto',
+              );
+              setHistory(nextHistory);
+            }}
             style={styles.previewButton}
             variant="light"
           />
@@ -311,7 +374,7 @@ function buildHistoryEntry({
     category: command?.category,
     title: command?.title,
     description: command?.description,
-    executedAction: executedAction ?? getExecutedAction(command),
+    executedAction: executedAction ?? getInitialExecutedAction(command),
     origin,
     createdAt: new Date().toISOString(),
     status,
@@ -323,23 +386,19 @@ function getCommandStatus(command?: ParsedAlertCommand): AICommandStatus {
     return 'fallido';
   }
 
-  if (command.intent === 'open_groups' || command.intent === 'show_map') {
-    return 'ejecutado';
-  }
-
   return 'detectado';
 }
 
-function getExecutedAction(command?: ParsedAlertCommand) {
+function getInitialExecutedAction(command?: ParsedAlertCommand) {
   switch (command?.intent) {
     case 'create_alert':
       return 'previsualizacion_alerta';
     case 'call_emergency':
       return 'preparar_contacto_emergencia';
     case 'open_groups':
-      return 'abrir_grupos';
+      return 'preparar_navegacion_grupos';
     case 'show_map':
-      return 'abrir_mapa';
+      return 'preparar_navegacion_mapa';
     case 'unknown':
     default:
       return 'sin_accion';
