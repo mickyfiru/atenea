@@ -26,3 +26,43 @@ Text-to-Speech usa `expo-speech` desde `src/services/voice/tts.ts` con preferenc
 2. En el panel `Atenea IA`, escribe: `Hay un accidente en avenida principal`.
 3. Revisa la previsualización generada.
 4. Usa `Crear alerta` para abrir el modal existente con los datos iniciales.
+
+## Modo demostracion en universidad
+
+Para una demo segura usa siempre el proveedor mock:
+
+```bash
+EXPO_PUBLIC_ATENEA_AI_COMMAND_PROVIDER=mock
+EXPO_PUBLIC_OLLAMA_BASE_URL=http://IP_DE_MI_PC:11434/api/chat
+EXPO_PUBLIC_OLLAMA_MODEL=llama3.1
+EXPO_PUBLIC_DEEPSEEK_BACKEND_URL=
+```
+
+Con `EXPO_PUBLIC_ATENEA_AI_COMMAND_PROVIDER=mock`, ATENEA no intenta llamar a Ollama. Esto evita depender de una IP local o del Wi-Fi de la universidad.
+
+Para probar Ollama en una red nueva:
+
+1. En Windows, ejecuta:
+
+```powershell
+ipconfig
+```
+
+2. Busca la IPv4 del adaptador Wi-Fi.
+3. Actualiza `.env`:
+
+```bash
+EXPO_PUBLIC_ATENEA_AI_COMMAND_PROVIDER=ollama
+EXPO_PUBLIC_OLLAMA_BASE_URL=http://NUEVA_IP:11434/api/chat
+EXPO_PUBLIC_OLLAMA_MODEL=llama3.1
+```
+
+4. Reinicia Metro:
+
+```bash
+npx expo start --dev-client --tunnel --clear
+```
+
+Si Ollama no responde, cambia la IP, tarda mas de 8 segundos, devuelve JSON invalido o falla la red, ATENEA muestra `IA: Ollama no disponible, usando Mock Demo` y sigue funcionando con mock.
+
+DeepSeek queda preparado solo mediante backend seguro o Firebase Function. La API key de DeepSeek no debe ir en el frontend.

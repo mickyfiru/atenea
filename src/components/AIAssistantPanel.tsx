@@ -10,6 +10,7 @@ import {
   AICommandStatus,
   AIAssistantIntent,
   ParsedAlertCommand,
+  getAIAssistantProviderLabel,
   sendMessage,
 } from '../services/ai/index';
 import {
@@ -56,6 +57,7 @@ function AIAssistantPanel({ onCreateAlertDraft, onIntent }, ref) {
   const [commandPreview, setCommandPreview] = useState<ParsedAlertCommand>();
   const [commandHistoryId, setCommandHistoryId] = useState<string>();
   const [history, setHistory] = useState<AICommandHistoryEntry[]>([]);
+  const [providerLabel, setProviderLabel] = useState(getAIAssistantProviderLabel());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -97,6 +99,7 @@ function AIAssistantPanel({ onCreateAlertDraft, onIntent }, ref) {
       let nextHistory = await saveAICommandHistory(historyEntry);
 
       setResponse(nextResponse.text);
+      setProviderLabel(nextResponse.providerLabel ?? getAIAssistantProviderLabel());
       setCommandPreview(nextCommand);
       setCommandHistoryId(historyEntry.id);
       setHistory(nextHistory);
@@ -150,6 +153,7 @@ function AIAssistantPanel({ onCreateAlertDraft, onIntent }, ref) {
       setCommandPreview(undefined);
       setCommandHistoryId(historyEntry.id);
       setHistory(nextHistory);
+      setProviderLabel(getAIAssistantProviderLabel());
       setResponse(nextResponse);
       await speak(spokenResponse);
     },
@@ -225,7 +229,7 @@ function AIAssistantPanel({ onCreateAlertDraft, onIntent }, ref) {
           <Ionicons name="sparkles-outline" size={20} color={colors.primary} />
           <Text style={styles.title}>Atenea IA</Text>
         </View>
-        <Text style={styles.badge}>Mock</Text>
+        <Text style={styles.badge}>{providerLabel}</Text>
       </View>
 
       <View style={styles.inputRow}>
@@ -668,8 +672,10 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontSize: 12,
     fontWeight: '900',
+    maxWidth: '58%',
     paddingHorizontal: 10,
     paddingVertical: 5,
+    textAlign: 'right',
   },
   inputRow: {
     alignItems: 'center',

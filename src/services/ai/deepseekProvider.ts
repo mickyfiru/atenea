@@ -27,6 +27,7 @@ async function postToBackend<T>(path: string, body: unknown): Promise<T> {
 export const deepSeekProvider: AIAssistantProvider = {
   provider: 'deepseek',
   async sendMessage(prompt, context) {
+    // La API key de DeepSeek no debe ir en el frontend. Usar backend o Firebase Function.
     // Nunca pongas una API key real de DeepSeek en el frontend. Usa un backend propio
     // que firme la solicitud, aplique cuotas y filtre datos sensibles antes de llamar al modelo.
     return postToBackend('/chat', {

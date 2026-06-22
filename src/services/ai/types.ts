@@ -51,6 +51,9 @@ export type AIMessageContext = {
 export type AIMessageResponse = {
   text: string;
   parsedCommand?: ParsedAlertCommand;
+  providerLabel?: string;
+  providerUsed?: AIAssistantProviderName;
+  fallbackUsed?: boolean;
 };
 
 export type AIAssistantProvider = {
