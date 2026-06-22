@@ -1,9 +1,18 @@
 import {
   AIAssistantProvider,
   AIAssistantIntent,
+  AIMessageResponse,
   EmergencyGroupId,
   ParsedAlertCommand,
 } from './types';
+
+type AlertMatch = {
+  pattern: RegExp;
+  category: ParsedAlertCommand['category'];
+  title: string;
+  emergencyGroupId?: EmergencyGroupId;
+  confidence: number;
+};
 
 function normalize(text: string) {
   return text
@@ -11,36 +20,24 @@ function normalize(text: string) {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[.,;:!?¿¡]/g, ' ')
+    .replace(/[.,;:!?\u00bf\u00a1]/g, ' ')
     .replace(/\s+/g, ' ');
 }
 
-function cleanIncidentPlace(text: string) {
-  return normalize(text)
-    .replace(/\b(hay|ocurrio|ocurrio un|ocurrio una|reportar|reporte|alerta|en|un|una)\b/g, ' ')
-    .replace(/\b(accidente|choque|colision|robo|asalto|incendio|fuego|humo|corte|agua|luz)\b/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 function getNavigationIntent(normalized: string): AIAssistantIntent | undefined {
-  if (/\b(grupos|comunidades)\b/.test(normalized)) {
+  if (/\b(abre|abrir|mostrar|muestrame|ver)\b.*\b(grupos|comunidades)\b/.test(normalized)) {
     return 'open_groups';
   }
 
-  if (/\b(mapa|ubicacion de alertas|ver cerca)\b/.test(normalized)) {
+  if (/\b(muestrame|mostrar|abre|abrir|ver)\b.*\bmapa\b/.test(normalized) || normalized === 'mapa') {
     return 'show_map';
-  }
-
-  if (/\b(llamar emergencia|llamar ambulancia|llamar policia|llamar bomberos)\b/.test(normalized)) {
-    return 'call_emergency';
   }
 
   return undefined;
 }
 
 function buildEmergencyGroup(normalized: string): EmergencyGroupId | undefined {
-  if (/\b(bombero|bomberos|incendio|fuego|humo)\b/.test(normalized)) {
+  if (/\b(bombero|bomberos|incendio|fuego|humo|gas)\b/.test(normalized)) {
     return 'default-firefighters';
   }
 
@@ -48,11 +45,139 @@ function buildEmergencyGroup(normalized: string): EmergencyGroupId | undefined {
     return 'default-ambulance';
   }
 
-  if (/\b(policia|robo|asalto|sospechoso|seguridad)\b/.test(normalized)) {
+  if (/\b(carabineros|policia|robo|asalto|sospechoso|seguridad|pelea)\b/.test(normalized)) {
     return 'default-police';
   }
 
   return undefined;
+}
+
+function getEmergencyCall(normalized: string): EmergencyGroupId | undefined {
+  if (/\b(llama|llamar|necesito)\b.*\b(bombero|bomberos)\b/.test(normalized)) {
+    return 'default-firefighters';
+  }
+
+  if (/\b(llama|llamar|necesito)\b.*\b(carabineros|policia)\b/.test(normalized)) {
+    return 'default-police';
+  }
+
+  if (
+    /\b(llama|llamar|necesito)\b.*\bambulancia\b/.test(normalized) ||
+    /\bemergencia medica\b/.test(normalized)
+  ) {
+    return 'default-ambulance';
+  }
+
+  return undefined;
+}
+
+const ALERT_MATCHES: AlertMatch[] = [
+  {
+    pattern: /\b(hay un robo|hay robo|me robaron|robo|asalto)\b/,
+    category: 'Seguridad',
+    title: 'Robo reportado',
+    emergencyGroupId: 'default-police',
+    confidence: 0.84,
+  },
+  {
+    pattern: /\b(pelea|hay una pelea|hay pelea)\b/,
+    category: 'Seguridad',
+    title: 'Pelea reportada',
+    emergencyGroupId: 'default-police',
+    confidence: 0.82,
+  },
+  {
+    pattern: /\b(persona sospechosa|sospechoso|sospechosa)\b/,
+    category: 'Seguridad',
+    title: 'Persona sospechosa',
+    emergencyGroupId: 'default-police',
+    confidence: 0.78,
+  },
+  {
+    pattern: /\b(incendio|fuego|humo|quemando)\b/,
+    category: 'Seguridad',
+    title: 'Incendio reportado',
+    emergencyGroupId: 'default-firefighters',
+    confidence: 0.86,
+  },
+  {
+    pattern: /\b(accidente|choque|colision|atropello)\b/,
+    category: 'Tr\u00e1nsito',
+    title: 'Accidente vehicular',
+    emergencyGroupId: 'default-ambulance',
+    confidence: 0.82,
+  },
+  {
+    pattern: /\b(taco|trafico|transito lento|congestion)\b/,
+    category: 'Tr\u00e1nsito',
+    title: 'Congesti\u00f3n vehicular',
+    confidence: 0.76,
+  },
+  {
+    pattern: /\b(vehiculo detenido|auto detenido|calle bloqueada|via bloqueada|avenida bloqueada)\b/,
+    category: 'Tr\u00e1nsito',
+    title: 'Calle bloqueada',
+    confidence: 0.78,
+  },
+  {
+    pattern: /\bbasura acumulada\b/,
+    category: 'Comunidad',
+    title: 'Basura acumulada',
+    confidence: 0.74,
+  },
+  {
+    pattern: /\bruido molesto\b/,
+    category: 'Comunidad',
+    title: 'Ruido molesto',
+    confidence: 0.74,
+  },
+  {
+    pattern: /\bperro perdido\b/,
+    category: 'Comunidad',
+    title: 'Perro perdido',
+    confidence: 0.74,
+  },
+  {
+    pattern: /\bproblema vecinal\b/,
+    category: 'Comunidad',
+    title: 'Problema vecinal',
+    confidence: 0.72,
+  },
+  {
+    pattern: /\b(corte de luz|sin luz)\b/,
+    category: 'Servicios',
+    title: 'Corte de luz',
+    confidence: 0.82,
+  },
+  {
+    pattern: /\b(sin agua|corte de agua)\b/,
+    category: 'Servicios',
+    title: 'Corte de agua',
+    confidence: 0.8,
+  },
+  {
+    pattern: /\b(fuga de gas|olor a gas)\b/,
+    category: 'Servicios',
+    title: 'Fuga de gas',
+    emergencyGroupId: 'default-firefighters',
+    confidence: 0.86,
+  },
+  {
+    pattern: /\b(poste caido|poste en el suelo|alumbrado)\b/,
+    category: 'Servicios',
+    title: 'Poste ca\u00eddo',
+    confidence: 0.78,
+  },
+];
+
+function buildDescription(originalText: string, title: string) {
+  const trimmedText = originalText.trim();
+
+  if (!trimmedText) {
+    return title;
+  }
+
+  return `${title}. Reporte del usuario: "${trimmedText}"`;
 }
 
 export async function parseMockAlertCommand(text: string): Promise<ParsedAlertCommand> {
@@ -65,67 +190,33 @@ export async function parseMockAlertCommand(text: string): Promise<ParsedAlertCo
     };
   }
 
+  const emergencyGroupId = getEmergencyCall(normalized);
+  if (emergencyGroupId) {
+    return {
+      intent: 'call_emergency',
+      emergencyGroupId,
+      confidence: 0.86,
+    };
+  }
+
   const navigationIntent = getNavigationIntent(normalized);
   if (navigationIntent) {
     return {
       intent: navigationIntent,
-      emergencyGroupId: buildEmergencyGroup(normalized),
-      confidence: 0.74,
-    };
-  }
-
-  if (/\b(accidente|choque|colision|transito|trafico|atropello|avenida)\b/.test(normalized)) {
-    const place = cleanIncidentPlace(text) || 'avenida principal';
-
-    return {
-      intent: 'create_alert',
-      category: 'Tránsito',
-      title: 'Accidente vehicular',
-      description: `Accidente reportado en ${place}`,
-      emergencyGroupId: 'default-ambulance',
-      confidence: 0.8,
-    };
-  }
-
-  if (/\b(robo|asalto|sospechoso|seguridad|delito|violencia)\b/.test(normalized)) {
-    return {
-      intent: 'create_alert',
-      category: 'Seguridad',
-      title: 'Incidente de seguridad',
-      description: text.trim(),
-      emergencyGroupId: 'default-police',
       confidence: 0.78,
     };
   }
 
-  if (/\b(incendio|fuego|humo|quemando|bomberos)\b/.test(normalized)) {
-    return {
-      intent: 'create_alert',
-      category: 'Seguridad',
-      title: 'Incendio reportado',
-      description: text.trim(),
-      emergencyGroupId: 'default-firefighters',
-      confidence: 0.82,
-    };
-  }
+  const alertMatch = ALERT_MATCHES.find((match) => match.pattern.test(normalized));
 
-  if (/\b(corte de luz|corte de agua|basura|alumbrado|servicio|servicios)\b/.test(normalized)) {
+  if (alertMatch) {
     return {
       intent: 'create_alert',
-      category: 'Servicios',
-      title: 'Problema de servicios',
-      description: text.trim(),
-      confidence: 0.72,
-    };
-  }
-
-  if (/\b(vecino|vecinos|comunidad|ruido|mascota|colegio|barrio)\b/.test(normalized)) {
-    return {
-      intent: 'create_alert',
-      category: 'Comunidad',
-      title: 'Aviso comunitario',
-      description: text.trim(),
-      confidence: 0.68,
+      category: alertMatch.category,
+      title: alertMatch.title,
+      description: buildDescription(text, alertMatch.title),
+      emergencyGroupId: alertMatch.emergencyGroupId ?? buildEmergencyGroup(normalized),
+      confidence: alertMatch.confidence,
     };
   }
 
@@ -135,44 +226,61 @@ export async function parseMockAlertCommand(text: string): Promise<ParsedAlertCo
   };
 }
 
+function getEmergencyGroupLabel(groupId?: EmergencyGroupId) {
+  switch (groupId) {
+    case 'default-firefighters':
+      return 'bomberos';
+    case 'default-police':
+      return 'carabineros';
+    case 'default-ambulance':
+      return 'ambulancia';
+    default:
+      return 'emergencia';
+  }
+}
+
+function buildMockResponse(parsedCommand: ParsedAlertCommand, sector: string): AIMessageResponse {
+  if (parsedCommand.intent === 'create_alert') {
+    return {
+      text: `Detecte una posible alerta de ${parsedCommand.category?.toLowerCase()}${sector}. Revisa la previsualizacion antes de crearla.`,
+      parsedCommand,
+    };
+  }
+
+  if (parsedCommand.intent === 'open_groups') {
+    return {
+      text: 'Abriendo grupos...',
+      parsedCommand,
+    };
+  }
+
+  if (parsedCommand.intent === 'show_map') {
+    return {
+      text: 'Abriendo mapa...',
+      parsedCommand,
+    };
+  }
+
+  if (parsedCommand.intent === 'call_emergency') {
+    return {
+      text: `Prepare el contacto de emergencia: ${getEmergencyGroupLabel(parsedCommand.emergencyGroupId)}.`,
+      parsedCommand,
+    };
+  }
+
+  return {
+    text: 'No entendi el comando. Puedes decir: hay un accidente, llama a bomberos o abre grupos.',
+    parsedCommand,
+  };
+}
+
 export const mockProvider: AIAssistantProvider = {
   provider: 'mock',
   async sendMessage(prompt, context) {
     const parsedCommand = await parseMockAlertCommand(prompt);
     const sector = context?.sector ? ` en ${context.sector}` : '';
 
-    if (parsedCommand.intent === 'create_alert') {
-      return {
-        text: `Detecte una posible alerta${sector}: ${parsedCommand.title}. Revisa la previsualizacion antes de crearla.`,
-        parsedCommand,
-      };
-    }
-
-    if (parsedCommand.intent === 'open_groups') {
-      return {
-        text: 'Puedo abrir tus grupos comunitarios.',
-        parsedCommand,
-      };
-    }
-
-    if (parsedCommand.intent === 'show_map') {
-      return {
-        text: 'Puedo abrir el mapa de alertas cercanas.',
-        parsedCommand,
-      };
-    }
-
-    if (parsedCommand.intent === 'call_emergency') {
-      return {
-        text: 'Las llamadas reales aun no estan activas. Puedo dejar preparado el flujo de emergencia.',
-        parsedCommand,
-      };
-    }
-
-    return {
-      text: 'Todavia no entiendo bien esa instruccion. Prueba con una alerta concreta, por ejemplo: Hay un accidente en avenida principal.',
-      parsedCommand,
-    };
+    return buildMockResponse(parsedCommand, sector);
   },
   parseAlertCommand: parseMockAlertCommand,
 };

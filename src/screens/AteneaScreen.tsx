@@ -148,7 +148,7 @@ export function AteneaScreen() {
     }
   }
 
-  function handleAssistantIntent(intent: AIAssistantIntent) {
+  function handleAssistantIntent(intent: AIAssistantIntent, command?: ParsedAlertCommand) {
     switch (intent) {
       case 'open_groups':
         navigation.navigate('MainTabs', { screen: 'Groups' });
@@ -157,6 +157,11 @@ export function AteneaScreen() {
         navigation.navigate('Map');
         return;
       case 'call_emergency':
+        if (command?.emergencyGroupId) {
+          navigation.navigate('Chat', { groupId: command.emergencyGroupId });
+          return;
+        }
+
         setAteneaResponse('Las llamadas reales todavia no estan activas.');
         return;
       case 'create_alert':
