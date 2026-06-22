@@ -53,22 +53,37 @@ async function ensureNotificationChannels() {
     return;
   }
 
-  await Notifications.setNotificationChannelAsync(SILENT_CHANNEL_ID, {
-    name: 'ATENEA alertas silenciosas',
-    importance: Notifications.AndroidImportance.DEFAULT,
-    sound: null,
-  });
+  try {
+    await Notifications.deleteNotificationChannelAsync(SILENT_CHANNEL_ID);
+    await Promise.all(
+      Object.values(CATEGORY_CHANNELS).map((channelId) =>
+        Notifications.deleteNotificationChannelAsync(channelId),
+      ),
+    );
+  } catch (error) {
+    console.warn('No se pudieron reiniciar canales de notificaciones.', error);
+  }
 
-  await Promise.all(
-    Object.entries(CATEGORY_CHANNELS).map(([category, channelId]) =>
-      Notifications.setNotificationChannelAsync(channelId, {
-        name: `ATENEA ${category}`,
-        importance: Notifications.AndroidImportance.HIGH,
-        sound: CATEGORY_SOUND_FILES[category as AlertCategory],
-        vibrationPattern: [0, 220, 120, 220],
-      }),
-    ),
-  );
+  try {
+    await Notifications.setNotificationChannelAsync(SILENT_CHANNEL_ID, {
+      name: 'ATENEA alertas silenciosas',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      sound: null,
+    });
+
+    await Promise.all(
+      Object.entries(CATEGORY_CHANNELS).map(([category, channelId]) =>
+        Notifications.setNotificationChannelAsync(channelId, {
+          name: `ATENEA ${category}`,
+          importance: Notifications.AndroidImportance.HIGH,
+          sound: CATEGORY_SOUND_FILES[category as AlertCategory],
+          vibrationPattern: [0, 220, 120, 220],
+        }),
+      ),
+    );
+  } catch (error) {
+    console.warn('No se pudieron configurar sonidos de notificacion.', error);
+  }
 }
 
 export async function requestNotificationPermission() {

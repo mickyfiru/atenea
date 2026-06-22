@@ -54,6 +54,10 @@ service cloud.firestore {
         request.auth.uid in get(groupPath(groupId)).data.members;
     }
 
+    function isDefaultEmergencyGroup(groupId) {
+      return groupId in ['default-firefighters', 'default-police', 'default-ambulance'];
+    }
+
     function validUserDocument(userId) {
       return request.resource.data.keys().hasOnly([
         'id',
@@ -170,7 +174,10 @@ service cloud.firestore {
     }
 
     match /groups/{groupId} {
-      allow read: if isGroupMember(groupId);
+      allow read: if isSignedIn() && (
+        isGroupMember(groupId) ||
+        isDefaultEmergencyGroup(groupId)
+      );
       allow create: if isSignedIn() && validGroupDocument(groupId);
       allow update: if isSignedIn() && (
         (isGroupMember(groupId) && isUpdatingGroupActivity()) ||

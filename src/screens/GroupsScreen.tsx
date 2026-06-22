@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -20,7 +21,14 @@ import { SectionCard } from '../components/SectionCard';
 import { colors, radius } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 import { RootStackParamList } from '../navigation/types';
-import { createGroup, joinGroupByCode, subscribeUserGroups } from '../services/groups';
+import { auth } from '../services/firebase';
+import {
+  createGroup,
+  joinGroupByCode,
+  readGroupByIdForDiagnostics,
+  subscribeDefaultGroups,
+  subscribeUserGroups,
+} from '../services/groups';
 import { CommunityGroup } from '../types/domain';
 
 type GroupModalMode = 'create' | 'join' | undefined;
@@ -28,7 +36,10 @@ type GroupModalMode = 'create' | 'join' | undefined;
 export function GroupsScreen() {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const { user } = useAuth();
-  const [groups, setGroups] = useState<CommunityGroup[]>([]);
+  const firebaseUser = auth?.currentUser;
+  const [userGroups, setUserGroups] = useState<CommunityGroup[]>([]);
+  const [directUserGroups, setDirectUserGroups] = useState<CommunityGroup[]>([]);
+  const [defaultGroups, setDefaultGroups] = useState<CommunityGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [modalMode, setModalMode] = useState<GroupModalMode>();
@@ -37,17 +48,38 @@ export function GroupsScreen() {
   const [alertComposerVisible, setAlertComposerVisible] = useState(false);
 
   useEffect(() => {
+    console.log('current uid', user?.uid ?? '');
+    console.log('[GroupsScreen] firebase-current-user', {
+      'auth.currentUser.uid': auth?.currentUser?.uid ?? '',
+      'auth.currentUser.isAnonymous': auth?.currentUser?.isAnonymous ?? false,
+    });
+    console.log('[GroupsScreen] create-button-state', {
+      'Platform.OS': Platform.OS,
+      hasUser: Boolean(user),
+      'user.uid': user?.uid ?? '',
+      'user.isAnonymous': user?.isAnonymous ?? false,
+      canCreateGroups: Boolean(user),
+      showFab: true,
+    });
+  }, [user]);
+
+  useEffect(() => {
     if (!user) {
+      setUserGroups([]);
+      setDirectUserGroups([]);
+      setDefaultGroups([]);
       setLoading(false);
       return undefined;
     }
 
     setLoading(true);
 
-    const unsubscribe = subscribeUserGroups(
+    const unsubscribeUserGroups = subscribeUserGroups(
       user.uid,
       (nextGroups) => {
-        setGroups(nextGroups);
+        console.log('current uid', user.uid);
+        console.log('groups received', nextGroups);
+        setUserGroups(nextGroups);
         setError('');
         setLoading(false);
       },
@@ -57,17 +89,87 @@ export function GroupsScreen() {
       },
     );
 
-    return unsubscribe;
+    const unsubscribeDefaultGroups = subscribeDefaultGroups(
+      user.uid,
+      (nextGroups) => {
+        console.log('[GroupsScreen] default groups received', nextGroups);
+        setDefaultGroups(nextGroups);
+        setError('');
+        setLoading(false);
+      },
+      (snapshotError) => {
+        setError(snapshotError.message);
+        setLoading(false);
+      },
+    );
+
+    return () => {
+      unsubscribeUserGroups();
+      unsubscribeDefaultGroups();
+    };
   }, [user]);
 
+  const effectiveUserGroups = useMemo(() => {
+    const mergedGroups = new Map<string, CommunityGroup>();
+
+    userGroups.forEach((group) => {
+      mergedGroups.set(group.id, group);
+    });
+
+    directUserGroups.forEach((group) => {
+      mergedGroups.set(group.id, group);
+    });
+
+    return Array.from(mergedGroups.values()).sort(
+      (a, b) =>
+        (b.lastMessageAt?.getTime() ?? b.createdAt.getTime()) -
+        (a.lastMessageAt?.getTime() ?? a.createdAt.getTime()),
+    );
+  }, [userGroups, directUserGroups]);
+
+  const groups = useMemo(() => {
+    const mergedGroups = new Map<string, CommunityGroup>();
+
+    defaultGroups.forEach((group) => {
+      mergedGroups.set(group.id, group);
+    });
+
+    effectiveUserGroups.forEach((group) => {
+      mergedGroups.set(group.id, group);
+    });
+
+    return Array.from(mergedGroups.values()).sort(
+      (a, b) =>
+        (b.lastMessageAt?.getTime() ?? b.createdAt.getTime()) -
+        (a.lastMessageAt?.getTime() ?? a.createdAt.getTime()),
+    );
+  }, [defaultGroups, effectiveUserGroups]);
+
   const emergencyGroups = useMemo(
-    () => groups.filter((group) => group.type === 'emergency'),
-    [groups],
+    () => defaultGroups.filter((group) => group.type === 'emergency'),
+    [defaultGroups],
   );
-  const communityGroups = useMemo(
-    () => groups.filter((group) => group.type === 'community'),
-    [groups],
+  const myGroups = useMemo(
+    () => effectiveUserGroups.filter((group) => group.type === 'community'),
+    [effectiveUserGroups],
   );
+
+  useEffect(() => {
+    console.log('current uid', user?.uid ?? '');
+    console.log('groups received', groups);
+    console.log('[GroupsScreen] userGroups', userGroups);
+    console.log('[GroupsScreen] directUserGroups', directUserGroups);
+    console.log('[GroupsScreen] defaultGroups', defaultGroups);
+    console.log('allGroups', groups);
+    console.log('myGroups', myGroups);
+    console.log('[GroupsScreen] group-type-summary', {
+      allGroupTypes: groups.map((group) => ({
+        id: group.id,
+        type: group.type,
+      })),
+      myGroupIds: myGroups.map((group) => group.id),
+    });
+  }, [defaultGroups, directUserGroups, groups, myGroups, user?.uid, userGroups]);
 
   const closeModal = () => {
     if (saving) {
@@ -92,6 +194,21 @@ export function GroupsScreen() {
         modalMode === 'create'
           ? await createGroup(user.uid, inputValue)
           : await joinGroupByCode(user.uid, inputValue);
+      const diagnostics = await readGroupByIdForDiagnostics(groupId, user.uid);
+      const diagnosticGroup = diagnostics.group;
+
+      if (diagnosticGroup && diagnostics.includesUser) {
+        setDirectUserGroups((currentGroups) => {
+          const mergedGroups = new Map<string, CommunityGroup>();
+
+          currentGroups.forEach((group) => {
+            mergedGroups.set(group.id, group);
+          });
+          mergedGroups.set(diagnosticGroup.id, diagnosticGroup);
+
+          return Array.from(mergedGroups.values());
+        });
+      }
 
       setInputValue('');
       setModalMode(undefined);
@@ -107,11 +224,23 @@ export function GroupsScreen() {
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.safe}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <View>
+          <View style={styles.headerText}>
             <Text style={styles.title}>Groups</Text>
             <Text style={styles.subtitle}>River District community channels</Text>
           </View>
-          <View style={styles.headerActions}>
+          <View
+            onLayout={(event) => {
+              const { height, width, x, y } = event.nativeEvent.layout;
+              console.log('[GroupsScreen] headerActions:layout', {
+                'Platform.OS': Platform.OS,
+                height,
+                width,
+                x,
+                y,
+              });
+            }}
+            style={styles.headerActions}
+          >
             <Pressable
               onPress={() => setAlertComposerVisible(true)}
               style={({ pressed }) => [styles.iconButton, styles.alertIconButton, pressed && styles.pressed]}
@@ -125,6 +254,18 @@ export function GroupsScreen() {
               <Ionicons name="enter-outline" size={22} color={colors.primary} />
             </Pressable>
             <Pressable
+              accessibilityLabel="Crear grupo"
+              hitSlop={8}
+              onLayout={(event) => {
+                const { height, width, x, y } = event.nativeEvent.layout;
+                console.log('[GroupsScreen] createGroupButton:layout', {
+                  'Platform.OS': Platform.OS,
+                  height,
+                  width,
+                  x,
+                  y,
+                });
+              }}
               onPress={() => setModalMode('create')}
               style={({ pressed }) => [styles.iconButton, styles.primaryIconButton, pressed && styles.pressed]}
             >
@@ -132,6 +273,10 @@ export function GroupsScreen() {
             </Pressable>
           </View>
         </View>
+
+        <Text style={styles.debugText}>
+          {`DEBUG UID: ${firebaseUser?.uid ?? 'sin usuario'} | anon: ${firebaseUser?.isAnonymous ? 'si' : 'no'}`}
+        </Text>
 
         {loading ? (
           <View style={styles.loading}>
@@ -160,11 +305,11 @@ export function GroupsScreen() {
         </SectionCard>
 
         <SectionCard title="My groups">
-          {communityGroups.length ? (
-            communityGroups.map((group, index) => (
+          {myGroups.length ? (
+            myGroups.map((group, index) => (
               <View key={group.id}>
                 <GroupRow group={group} onPress={() => navigation.navigate('Chat', { groupId: group.id })} />
-                {index < communityGroups.length - 1 ? <View style={styles.separator} /> : null}
+                {index < myGroups.length - 1 ? <View style={styles.separator} /> : null}
               </View>
             ))
           ) : (
@@ -237,9 +382,17 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     marginTop: 12,
   },
+  headerText: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 12,
+  },
   headerActions: {
     flexDirection: 'row',
     gap: 10,
+    flexShrink: 0,
+    zIndex: 10,
+    elevation: 10,
   },
   title: {
     color: colors.ink,
@@ -256,9 +409,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.primarySoft,
     borderRadius: 22,
+    elevation: 2,
     height: 44,
     justifyContent: 'center',
     width: 44,
+    zIndex: 10,
   },
   primaryIconButton: {
     backgroundColor: colors.primary,
@@ -284,6 +439,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     marginBottom: 16,
+  },
+  debugText: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: '700',
+    marginBottom: 12,
   },
   separator: {
     backgroundColor: colors.line,

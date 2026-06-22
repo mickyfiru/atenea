@@ -7,8 +7,8 @@ import { AlertsScreen } from '../screens/AlertsScreen';
 import { AteneaScreen } from '../screens/AteneaScreen';
 import { ChatScreen } from '../screens/ChatScreen';
 import { GroupsScreen } from '../screens/GroupsScreen';
+import { LazyMapScreen } from '../screens/LazyMapScreen';
 import { LocationSettingsScreen } from '../screens/LocationSettingsScreen';
-import { MapScreen } from '../screens/MapScreen';
 import { OtpVerificationScreen } from '../screens/OtpVerificationScreen';
 import { PhoneAuthScreen } from '../screens/PhoneAuthScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
@@ -37,6 +37,7 @@ function MainTabs() {
 
 export function RootNavigator() {
   const { user } = useAuth();
+  console.log('[ATENEA startup] RootNavigator rendered. Authenticated:', Boolean(user));
 
   return (
     <NavigationContainer>
@@ -54,7 +55,7 @@ export function RootNavigator() {
             <Stack.Screen name="SoundSettings" component={SoundSettingsScreen} />
             <Stack.Screen name="Summary" component={SummaryScreen} />
             <Stack.Screen name="LocationSettings" component={LocationSettingsScreen} />
-            <Stack.Screen name="Map" component={MapScreen} />
+            <Stack.Screen name="Map" component={LazyMapScreen} />
           </>
         ) : (
           <>

@@ -68,13 +68,21 @@ export function AlertComposerModal({
     setError('');
 
     try {
-      const mediaUrl = media
-        ? await uploadAlertMedia({
+      let mediaUrl: string | undefined;
+      let mediaUploadFailed = false;
+
+      if (media) {
+        try {
+          mediaUrl = await uploadAlertMedia({
             uri: media.uri,
             userId,
-            contentType: media.mimeType,
-          })
-        : undefined;
+            contentType: getMediaContentType(media),
+          });
+        } catch (mediaError) {
+          mediaUploadFailed = true;
+          console.warn('No se pudo adjuntar la imagen de la alerta.', mediaError);
+        }
+      }
 
       await createAlert({
         userId,
@@ -83,12 +91,18 @@ export function AlertComposerModal({
         title,
         description,
         mediaUrl,
-        mediaType: getAlertMediaType(media),
+        mediaType: mediaUrl ? getAlertMediaType(media) : '',
       });
       setTitle('');
       setDescription('');
       setGroupId('');
       setMedia(undefined);
+
+      if (mediaUploadFailed) {
+        setError('La alerta se guardo, pero no pudimos adjuntar la imagen. Intenta con otra foto mas tarde.');
+        return;
+      }
+
       onClose();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'No pudimos crear la alerta.');
@@ -99,6 +113,14 @@ export function AlertComposerModal({
 
   function getAlertMediaType(asset?: ImagePicker.ImagePickerAsset) {
     return asset?.type === 'video' ? 'video' : asset ? 'image' : '';
+  }
+
+  function getMediaContentType(asset: ImagePicker.ImagePickerAsset) {
+    if (asset.mimeType) {
+      return asset.mimeType;
+    }
+
+    return asset.type === 'video' ? 'video/mp4' : 'image/jpeg';
   }
 
   const takePhoto = async () => {

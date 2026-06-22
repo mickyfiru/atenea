@@ -11,6 +11,7 @@ import {
   updateDoc,
   where,
   type DocumentData,
+  type DocumentSnapshot,
   type QueryDocumentSnapshot,
   type Timestamp,
   type Unsubscribe,
@@ -59,12 +60,58 @@ type FirestoreGroup = {
   lastMessageAt?: Timestamp;
 };
 
+type FirebaseErrorLike = Error & {
+  code?: string;
+};
+
+type FirestoreDebugDetails = {
+  functionName?: string;
+  query?: string;
+  groupIds?: string[];
+};
+
 function assertFirestore() {
   if (!db) {
     throw new Error('Firestore no esta configurado.');
   }
 
   return db;
+}
+
+function groupLogContext(userId?: string) {
+  const currentUser = auth?.currentUser;
+
+  return {
+    'user.uid': currentUser?.uid ?? userId ?? '',
+    'user.isAnonymous': currentUser?.isAnonymous ?? false,
+  };
+}
+
+function logGroupStart(event: string, userId?: string, details: FirestoreDebugDetails = {}) {
+  console.log(`[groups] ${event}`, {
+    ...groupLogContext(userId),
+    functionName: details.functionName ?? event,
+    query: details.query ?? '',
+    groupIds: details.groupIds ?? [],
+  });
+}
+
+function logGroupError(
+  event: string,
+  userId: string | undefined,
+  error: unknown,
+  details: FirestoreDebugDetails = {},
+) {
+  const firebaseError = error as Partial<FirebaseErrorLike>;
+
+  console.error(`[groups] ${event}`, {
+    ...groupLogContext(userId),
+    functionName: details.functionName ?? event,
+    query: details.query ?? '',
+    groupIds: details.groupIds ?? [],
+    'error.code': firebaseError.code ?? 'unknown',
+    'error.message': firebaseError.message ?? String(error),
+  });
 }
 
 function groupStyle(group: Pick<CommunityGroup, 'id' | 'type'> & { name: string }) {
@@ -99,7 +146,7 @@ function groupStyle(group: Pick<CommunityGroup, 'id' | 'type'> & { name: string 
   };
 }
 
-function snapshotToGroup(snapshot: QueryDocumentSnapshot<DocumentData>): CommunityGroup {
+function snapshotToGroup(snapshot: QueryDocumentSnapshot<DocumentData> | DocumentSnapshot<DocumentData>): CommunityGroup {
   const data = snapshot.data() as FirestoreGroup;
   const lastMessageAt = data.lastMessageAt?.toDate();
   const style = groupStyle({
@@ -124,37 +171,114 @@ function snapshotToGroup(snapshot: QueryDocumentSnapshot<DocumentData>): Communi
   };
 }
 
+function sortGroups(groups: CommunityGroup[]) {
+  return groups.sort(
+    (a, b) =>
+      (b.lastMessageAt?.getTime() ?? b.createdAt.getTime()) -
+      (a.lastMessageAt?.getTime() ?? a.createdAt.getTime()),
+  );
+}
+
 export async function ensureDefaultGroupsForUser(userId: string) {
   const firestore = assertFirestore();
-  assertAuthenticatedUser(auth?.currentUser, userId);
+  logGroupStart('ensureDefaultGroupsForUser:start', userId, {
+    functionName: 'ensureDefaultGroupsForUser',
+    query: 'doc(groups/{defaultGroupId})',
+    groupIds: DEFAULT_GROUPS.map((group) => group.id),
+  });
 
-  await Promise.all(
-    DEFAULT_GROUPS.map(async (group) => {
-      const groupRef = doc(firestore, 'groups', group.id);
-      const snapshot = await getDoc(groupRef);
+  try {
+    assertAuthenticatedUser(auth?.currentUser, userId);
 
-      if (snapshot.exists()) {
-        await updateDoc(groupRef, {
-          members: arrayUnion(userId),
+    await Promise.all(
+      DEFAULT_GROUPS.map(async (group) => {
+        const groupRef = doc(firestore, 'groups', group.id);
+        const snapshot = await getDoc(groupRef);
+
+        if (snapshot.exists()) {
+          const members = snapshot.data().members;
+
+          if (Array.isArray(members) && members.includes(userId)) {
+            return;
+          }
+
+          await updateDoc(groupRef, {
+            members: arrayUnion(userId),
+          });
+          return;
+        }
+
+        await setDoc(
+          groupRef,
+          {
+            id: group.id,
+            name: group.name,
+            type: 'emergency',
+            createdBy: userId,
+            members: [userId],
+            createdAt: serverTimestamp(),
+            lastMessage: group.lastMessage,
+            lastMessageAt: serverTimestamp(),
+          },
+        );
+      }),
+    );
+  } catch (error) {
+    logGroupError('ensureDefaultGroupsForUser:error', userId, error, {
+      functionName: 'ensureDefaultGroupsForUser',
+      query: 'doc(groups/{defaultGroupId})',
+      groupIds: DEFAULT_GROUPS.map((group) => group.id),
+    });
+    throw error;
+  }
+}
+
+export function subscribeDefaultGroups(
+  userId: string,
+  onGroups: (groups: CommunityGroup[]) => void,
+  onError: (error: Error) => void,
+): Unsubscribe {
+  const firestore = assertFirestore();
+  const defaultGroups = new Map<string, CommunityGroup>();
+  const defaultGroupIds = DEFAULT_GROUPS.map((group) => group.id);
+  logGroupStart('subscribeDefaultGroups:start', userId, {
+    functionName: 'subscribeDefaultGroups',
+    query: 'doc(groups/default-police), doc(groups/default-firefighters), doc(groups/default-ambulance)',
+    groupIds: defaultGroupIds,
+  });
+
+  const emitDefaultGroups = () => {
+    onGroups(sortGroups(Array.from(defaultGroups.values())));
+  };
+
+  const unsubscribes = DEFAULT_GROUPS.map((group) => {
+    const groupRef = doc(firestore, 'groups', group.id);
+
+    return onSnapshot(
+      groupRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          defaultGroups.set(snapshot.id, snapshotToGroup(snapshot));
+        } else {
+          defaultGroups.delete(group.id);
+        }
+
+        emitDefaultGroups();
+      },
+      (error) => {
+        logGroupError('subscribeDefaultGroups:error', userId, error, {
+          functionName: 'subscribeDefaultGroups',
+          query: `doc(groups/${group.id})`,
+          groupIds: [group.id],
         });
-        return;
-      }
+        onError(error);
+      },
+    );
+  });
 
-      await setDoc(
-        groupRef,
-        {
-          id: group.id,
-          name: group.name,
-          type: 'emergency',
-          createdBy: userId,
-          members: arrayUnion(userId),
-          createdAt: serverTimestamp(),
-          lastMessage: group.lastMessage,
-          lastMessageAt: serverTimestamp(),
-        },
-      );
-    }),
-  );
+  return () => {
+    unsubscribes.forEach((unsubscribe) => unsubscribe());
+  };
 }
 
 export function subscribeUserGroups(
@@ -163,6 +287,12 @@ export function subscribeUserGroups(
   onError: (error: Error) => void,
 ): Unsubscribe {
   const firestore = assertFirestore();
+  const groupMembershipQuery = "query(groups, where('members', 'array-contains', user.uid))";
+  logGroupStart('subscribeUserGroups:start', userId, {
+    functionName: 'subscribeUserGroups',
+    query: groupMembershipQuery,
+    groupIds: [],
+  });
   const groupsQuery = query(
     collection(firestore, 'groups'),
     where('members', 'array-contains', userId),
@@ -171,40 +301,91 @@ export function subscribeUserGroups(
   return onSnapshot(
     groupsQuery,
     (snapshot) => {
-      const groups = snapshot.docs
-        .map(snapshotToGroup)
-        .sort(
-          (a, b) =>
-            (b.lastMessageAt?.getTime() ?? b.createdAt.getTime()) -
-            (a.lastMessageAt?.getTime() ?? a.createdAt.getTime()),
-        );
+      const nextGroups = sortGroups(snapshot.docs.map(snapshotToGroup));
 
-      onGroups(groups);
+      console.log('[groups] subscribeUserGroups:snapshot', {
+        'user.uid': userId,
+        documentCount: snapshot.docs.length,
+        groupIds: snapshot.docs.map((groupSnapshot) => groupSnapshot.id),
+        groupTypes: snapshot.docs.map((groupSnapshot) => ({
+          id: groupSnapshot.id,
+          type: groupSnapshot.data().type,
+        })),
+        members: snapshot.docs.map((groupSnapshot) => ({
+          id: groupSnapshot.id,
+          members: groupSnapshot.data().members,
+          membersIsArray: Array.isArray(groupSnapshot.data().members),
+          includesUser: Array.isArray(groupSnapshot.data().members)
+            ? groupSnapshot.data().members.includes(userId)
+            : false,
+        })),
+      });
+
+      console.log('[groups] subscribeUserGroups:emit', {
+        'user.uid': userId,
+        documentCount: nextGroups.length,
+        groupIds: nextGroups.map((group) => group.id),
+        groupTypes: nextGroups.map((group) => ({
+          id: group.id,
+          type: group.type,
+        })),
+      });
+
+      onGroups(nextGroups);
     },
-    onError,
+    (error) => {
+      logGroupError('subscribeUserGroups:error', userId, error, {
+        functionName: 'subscribeUserGroups',
+        query: groupMembershipQuery,
+        groupIds: [],
+      });
+      onError(error);
+    },
   );
 }
 
 export async function createGroup(userId: string, name: string) {
   const firestore = assertFirestore();
-  const trimmedName = name.trim();
-  assertAuthenticatedUser(auth?.currentUser, userId);
-  assertNonEmptyText(trimmedName, 'Ingresa un nombre para el grupo.');
-
-  const groupRef = doc(collection(firestore, 'groups'));
-
-  await setDoc(groupRef, {
-    id: groupRef.id,
-    name: trimmedName,
-    type: 'community',
-    createdBy: userId,
-    members: [userId],
-    createdAt: serverTimestamp(),
-    lastMessage: 'Grupo creado',
-    lastMessageAt: serverTimestamp(),
+  logGroupStart('createGroup:start', userId, {
+    functionName: 'createGroup',
+    query: 'setDoc(doc(collection(groups)))',
+    groupIds: [],
   });
 
-  return groupRef.id;
+  try {
+    const trimmedName = name.trim();
+    const currentUser = auth?.currentUser;
+    assertAuthenticatedUser(currentUser, userId);
+    assertNonEmptyText(trimmedName, 'Ingresa un nombre para el grupo.');
+
+    const ownerId = currentUser?.uid;
+    if (!ownerId) {
+      throw new Error('Usuario no autenticado.');
+    }
+
+    const groupRef = doc(collection(firestore, 'groups'));
+    const groupId = groupRef.id;
+
+    await setDoc(groupRef, {
+      id: groupId,
+      name: trimmedName,
+      type: 'community',
+      createdBy: ownerId,
+      members: [ownerId],
+      createdAt: serverTimestamp(),
+      lastMessage: '',
+      lastMessageAt: serverTimestamp(),
+    });
+
+    return groupId;
+  } catch (error) {
+    logGroupError('createGroup:error', userId, error, {
+      functionName: 'createGroup',
+      query: 'setDoc(doc(collection(groups)))',
+      groupIds: [],
+    });
+    throw error;
+  }
 }
 
 export async function joinGroupByCode(userId: string, code: string) {
@@ -238,4 +419,32 @@ export async function getGroupById(groupId: string) {
   }
 
   return snapshotToGroup(snapshot as QueryDocumentSnapshot<DocumentData>);
+}
+
+export async function readGroupByIdForDiagnostics(groupId: string, userId: string) {
+  const firestore = assertFirestore();
+  const snapshot = await getDoc(doc(firestore, 'groups', groupId));
+  const data = snapshot.data();
+  const members = data?.members;
+  const membersIsArray = Array.isArray(members);
+  const includesUser = membersIsArray ? members.includes(userId) : false;
+
+  console.log('[groups] readGroupByIdForDiagnostics', {
+    groupId,
+    exists: snapshot.exists(),
+    'user.uid': userId,
+    type: data?.type,
+    members,
+    membersIsArray,
+    membersType: typeof members,
+    includesUser,
+  });
+
+  return {
+    exists: snapshot.exists(),
+    group: snapshot.exists() ? snapshotToGroup(snapshot) : undefined,
+    members,
+    membersIsArray,
+    includesUser,
+  };
 }

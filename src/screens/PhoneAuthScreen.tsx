@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { RecaptchaVerifier } from 'firebase/auth';
-import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
 import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -10,12 +9,14 @@ import { useAuth } from '../context/AuthContext';
 import { RootScreenProps } from '../navigation/types';
 import {
   getAuthErrorMessage,
+  isDevLoginEnabled,
   logAuthError,
   normalizePhoneNumber,
+  startDevSignIn,
   startPhoneSignIn,
   verifyFirebaseProject,
 } from '../services/auth';
-import { auth, firebaseConfig } from '../services/firebase';
+import { auth } from '../services/firebase';
 
 const WEB_RECAPTCHA_CONTAINER_ID = 'phone-auth-recaptcha';
 
@@ -25,7 +26,6 @@ export function PhoneAuthScreen({ navigation }: RootScreenProps<'PhoneAuth'>) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const webRecaptchaVerifier = useRef<RecaptchaVerifier | undefined>(undefined);
-  const nativeRecaptchaVerifier = useRef<FirebaseRecaptchaVerifierModal>(null);
 
   useEffect(() => {
     if (Platform.OS === 'web' && auth) {
@@ -70,8 +70,35 @@ export function PhoneAuthScreen({ navigation }: RootScreenProps<'PhoneAuth'>) {
     return verifier;
   };
 
+  const enterDevMode = async () => {
+    if (loading) {
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      await startDevSignIn();
+    } catch (devError) {
+      logAuthError(devError);
+      setError(getAuthErrorMessage(devError));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const submit = async () => {
     if (loading) {
+      return;
+    }
+
+    if (Platform.OS !== 'web') {
+      setError(
+        isDevLoginEnabled
+          ? 'Phone Auth nativo esta desactivado temporalmente en esta APK. Usa "Entrar en modo prueba".'
+          : 'Phone Auth nativo requiere una libreria compatible. Habilita EXPO_PUBLIC_ENABLE_DEV_LOGIN=true para probar la app.',
+      );
       return;
     }
 
@@ -88,11 +115,7 @@ export function PhoneAuthScreen({ navigation }: RootScreenProps<'PhoneAuth'>) {
     try {
       const webVerifier =
         Platform.OS === 'web' ? await createWebRecaptchaVerifier() : undefined;
-      const appVerifier =
-        Platform.OS === 'web'
-          ? webVerifier
-          : nativeRecaptchaVerifier.current ?? undefined;
-      const confirmationId = await startPhoneSignIn(normalizedPhone, appVerifier);
+      const confirmationId = await startPhoneSignIn(normalizedPhone, webVerifier);
       navigation.navigate('OtpVerification', {
         phoneNumber: normalizedPhone,
         confirmationId,
@@ -108,15 +131,6 @@ export function PhoneAuthScreen({ navigation }: RootScreenProps<'PhoneAuth'>) {
 
   return (
     <SafeAreaView style={styles.safe}>
-      {Platform.OS !== 'web' ? (
-        <FirebaseRecaptchaVerifierModal
-          ref={nativeRecaptchaVerifier}
-          attemptInvisibleVerification
-          cancelLabel="Cancelar"
-          firebaseConfig={firebaseConfig}
-          title="Verificacion ATENEA"
-        />
-      ) : null}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.content}
@@ -148,6 +162,11 @@ export function PhoneAuthScreen({ navigation }: RootScreenProps<'PhoneAuth'>) {
             </Text>
           ) : null}
           {error ? <Text style={styles.error}>{error}</Text> : null}
+          {Platform.OS !== 'web' && isDevLoginEnabled ? (
+            <Text style={styles.helperText}>
+              El modo prueba usa Firebase Anonymous Auth solo para validar la APK.
+            </Text>
+          ) : null}
         </View>
 
         <View style={styles.actions}>
@@ -156,6 +175,14 @@ export function PhoneAuthScreen({ navigation }: RootScreenProps<'PhoneAuth'>) {
             label={loading ? 'Enviando...' : 'Enviar codigo'}
             onPress={submit}
           />
+          {isDevLoginEnabled ? (
+            <PrimaryButton
+              disabled={loading || !firebaseReady}
+              label={loading ? 'Entrando...' : 'Entrar en modo prueba'}
+              onPress={enterDevMode}
+              variant="light"
+            />
+          ) : null}
           <PrimaryButton
             disabled={loading}
             label="Volver"
@@ -214,6 +241,12 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontSize: 14,
     fontWeight: '700',
+  },
+  helperText: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 19,
   },
   recaptcha: {
     height: 1,

@@ -28,11 +28,23 @@ type ReactNativeAuthModule = {
   getReactNativePersistence: (storage: typeof AsyncStorage) => Persistence;
 };
 
-export const firebaseApp = isFirebaseConfigured
-  ? getApps().length
-    ? getApp()
-    : initializeApp(firebaseConfig)
-  : undefined;
+function initializeFirebaseSafely() {
+  console.log('[ATENEA startup] Firebase configured:', isFirebaseConfigured);
+  console.log('[ATENEA startup] Firebase project:', firebaseConfig.projectId);
+
+  if (!isFirebaseConfigured) {
+    return undefined;
+  }
+
+  try {
+    return getApps().length ? getApp() : initializeApp(firebaseConfig);
+  } catch (error) {
+    console.warn('No se pudo inicializar Firebase.', error);
+    return undefined;
+  }
+}
+
+export const firebaseApp = initializeFirebaseSafely();
 
 function createAuth() {
   if (!firebaseApp) {
@@ -57,5 +69,32 @@ function createAuth() {
 }
 
 export const auth = createAuth();
-export const db = firebaseApp ? getFirestore(firebaseApp) : undefined;
-export const storage = firebaseApp ? getStorage(firebaseApp) : undefined;
+
+function createFirestore() {
+  if (!firebaseApp) {
+    return undefined;
+  }
+
+  try {
+    return getFirestore(firebaseApp);
+  } catch (error) {
+    console.warn('No se pudo inicializar Firestore.', error);
+    return undefined;
+  }
+}
+
+function createStorage() {
+  if (!firebaseApp) {
+    return undefined;
+  }
+
+  try {
+    return getStorage(firebaseApp);
+  } catch (error) {
+    console.warn('No se pudo inicializar Firebase Storage.', error);
+    return undefined;
+  }
+}
+
+export const db = createFirestore();
+export const storage = createStorage();

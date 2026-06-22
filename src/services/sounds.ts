@@ -1,5 +1,4 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Audio, type AVPlaybackStatus } from 'expo-av';
 
 import { AlertCategory } from '../types/domain';
 
@@ -13,13 +12,6 @@ export const DEFAULT_ALERT_SOUND_PREFERENCES: AlertSoundPreferences = {
   'Tr\u00e1nsito': true,
   Comunidad: true,
   Servicios: true,
-};
-
-const ALERT_SOUND_SOURCES: Record<AlertCategory, number> = {
-  Seguridad: require('../../assets/sounds/security.wav') as number,
-  'Tr\u00e1nsito': require('../../assets/sounds/traffic.wav') as number,
-  Comunidad: require('../../assets/sounds/community.wav') as number,
-  Servicios: require('../../assets/sounds/services.wav') as number,
 };
 
 const recentlyHandledAlertIds = new Set<string>();
@@ -83,50 +75,7 @@ export async function playAlertSound(soundType: AlertCategory) {
     return;
   }
 
-  const soundSource = ALERT_SOUND_SOURCES[soundType];
-
-  if (!soundSource) {
-    return;
-  }
-
-  try {
-    await Audio.setAudioModeAsync({
-      playsInSilentModeIOS: true,
-      shouldDuckAndroid: true,
-      staysActiveInBackground: false,
-    });
-
-    const { sound } = await Audio.Sound.createAsync(soundSource, {
-      shouldPlay: true,
-      volume: 0.9,
-    });
-    let disposed = false;
-
-    const dispose = async () => {
-      if (disposed) {
-        return;
-      }
-
-      disposed = true;
-      sound.setOnPlaybackStatusUpdate(null);
-
-      try {
-        await sound.unloadAsync();
-      } catch (error) {
-        console.warn('No se pudo liberar el sonido de alerta.', error);
-      }
-    };
-
-    sound.setOnPlaybackStatusUpdate((status: AVPlaybackStatus) => {
-      if (status.isLoaded && status.didJustFinish) {
-        void dispose();
-      }
-    });
-
-    setTimeout(() => {
-      void dispose();
-    }, 4000);
-  } catch (error) {
-    console.warn('No se pudo reproducir el sonido de alerta.', error);
-  }
+  console.log(
+    `[ATENEA startup] Sonido local temporalmente desactivado para ${soundType}.`,
+  );
 }

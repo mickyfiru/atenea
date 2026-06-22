@@ -22,7 +22,7 @@ import { mapboxConfig } from '../config/mapbox';
 import { useAuth } from '../context/AuthContext';
 import { RootScreenProps } from '../navigation/types';
 import { subscribeAlertsForGroups } from '../services/alerts';
-import { subscribeUserGroups } from '../services/groups';
+import { subscribeDefaultGroups, subscribeUserGroups } from '../services/groups';
 import { subscribeUserLocation } from '../services/location';
 import { CommunityAlert, CommunityGroup, UserLocation } from '../types/domain';
 import { getAlertCategoryTone } from '../utils/alerts';
@@ -30,11 +30,43 @@ import { formatRelativeTime } from '../utils/dates';
 import { formatDistance, getAlertDistanceKm, isAlertWithinKm } from '../utils/distance';
 
 type Coordinate = [number, number];
+const IQUIQUE_FALLBACK_COORDINATE: Coordinate = [-70.1404, -20.21049];
+
+type FirebaseErrorLike = Error & {
+  code?: string;
+};
+
+function mapScreenUserLogContext(user?: { uid: string; isAnonymous: boolean } | null) {
+  return {
+    'user.uid': user?.uid ?? '',
+    'user.isAnonymous': user?.isAnonymous ?? false,
+  };
+}
+
+function logMapScreenError(
+  functionName: string,
+  error: unknown,
+  user: { uid: string; isAnonymous: boolean } | null | undefined,
+  queryText: string,
+  groupIds: string[] = [],
+) {
+  const firebaseError = error as Partial<FirebaseErrorLike>;
+
+  console.error(`[MapScreen] ${functionName}:error`, {
+    functionName,
+    ...mapScreenUserLogContext(user),
+    query: queryText,
+    groupIds,
+    'error.code': firebaseError.code ?? 'unknown',
+    'error.message': firebaseError.message ?? String(error),
+  });
+}
 
 export function MapScreen({ navigation }: RootScreenProps<'Map'>) {
   const { user } = useAuth();
   const cameraRef = useRef<MapboxCamera>(null);
-  const [groups, setGroups] = useState<CommunityGroup[]>([]);
+  const [userGroups, setUserGroups] = useState<CommunityGroup[]>([]);
+  const [defaultGroups, setDefaultGroups] = useState<CommunityGroup[]>([]);
   const [alerts, setAlerts] = useState<CommunityAlert[]>([]);
   const [userLocation, setUserLocation] = useState<UserLocation>();
   const [selectedAlert, setSelectedAlert] = useState<CommunityAlert>();
@@ -43,28 +75,80 @@ export function MapScreen({ navigation }: RootScreenProps<'Map'>) {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    console.log('[MapScreen:mapboxToken]', mapboxConfig.accessToken ? 'present' : 'missing');
+
     if (mapboxConfig.accessToken) {
-      void Mapbox.setAccessToken(mapboxConfig.accessToken);
+      try {
+        void Mapbox.setAccessToken(mapboxConfig.accessToken);
+      } catch (mapboxError) {
+        console.warn('No se pudo inicializar Mapbox.', mapboxError);
+        setError('No pudimos inicializar Mapbox en este dispositivo.');
+      }
     }
   }, []);
 
   useEffect(() => {
     if (!user) {
+      setUserGroups([]);
+      setDefaultGroups([]);
       setLoading(false);
       return undefined;
     }
 
-    return subscribeUserGroups(
+    const groupsQueryText = "subscribeUserGroups -> query(groups, where('members', 'array-contains', user.uid))";
+    const defaultGroupsQueryText =
+      'subscribeDefaultGroups -> doc(groups/default-police), doc(groups/default-firefighters), doc(groups/default-ambulance)';
+    console.log('[MapScreen] MapScreen:loadGroups:start', {
+      functionName: 'MapScreen:loadGroups',
+      ...mapScreenUserLogContext(user),
+      query: `${groupsQueryText}; ${defaultGroupsQueryText}`,
+      groupIds: [],
+    });
+
+    const unsubscribeUserGroups = subscribeUserGroups(
       user.uid,
       (nextGroups) => {
-        setGroups(nextGroups);
+        console.log('[MapScreen] MapScreen:loadGroups:userGroups', {
+          functionName: 'MapScreen:loadGroups',
+          ...mapScreenUserLogContext(user),
+          query: groupsQueryText,
+          groupIds: nextGroups.map((group) => group.id),
+          groupCount: nextGroups.length,
+        });
+        setUserGroups(nextGroups);
         setLoading(false);
       },
       (groupsError) => {
-        setError(groupsError.message);
+        logMapScreenError('MapScreen:loadGroups', groupsError, user, groupsQueryText);
+        setError(`[MapScreen:loadGroups] ${groupsError.message}`);
         setLoading(false);
       },
     );
+
+    const unsubscribeDefaultGroups = subscribeDefaultGroups(
+      user.uid,
+      (nextGroups) => {
+        console.log('[MapScreen] MapScreen:loadGroups:defaultGroups', {
+          functionName: 'MapScreen:loadGroups',
+          ...mapScreenUserLogContext(user),
+          query: defaultGroupsQueryText,
+          groupIds: nextGroups.map((group) => group.id),
+          groupCount: nextGroups.length,
+        });
+        setDefaultGroups(nextGroups);
+        setLoading(false);
+      },
+      (groupsError) => {
+        logMapScreenError('MapScreen:loadGroups', groupsError, user, defaultGroupsQueryText);
+        setError(`[MapScreen:loadGroups] ${groupsError.message}`);
+        setLoading(false);
+      },
+    );
+
+    return () => {
+      unsubscribeUserGroups();
+      unsubscribeDefaultGroups();
+    };
   }, [user]);
 
   useEffect(() => {
@@ -73,28 +157,111 @@ export function MapScreen({ navigation }: RootScreenProps<'Map'>) {
       return undefined;
     }
 
+    const locationQueryText = 'doc(users/user.uid)';
+    console.log('[MapScreen] MapScreen:loadLocation:start', {
+      functionName: 'MapScreen:loadLocation',
+      ...mapScreenUserLogContext(user),
+      query: locationQueryText,
+      groupIds: [],
+    });
+
     return subscribeUserLocation(
       user.uid,
-      setUserLocation,
-      (locationError) => setError(locationError.message),
+      (nextLocation) => {
+        console.log('[MapScreen] MapScreen:loadLocation:success', {
+          functionName: 'MapScreen:loadLocation',
+          ...mapScreenUserLogContext(user),
+          query: locationQueryText,
+          groupIds: [],
+          locationEnabled: nextLocation.locationEnabled,
+        });
+        setUserLocation(nextLocation);
+      },
+      (locationError) => {
+        logMapScreenError('MapScreen:loadLocation', locationError, user, locationQueryText);
+        setError(`[MapScreen:loadLocation] ${locationError.message}`);
+      },
     );
   }, [user]);
 
+  const groups = useMemo(() => {
+    const mergedGroups = new Map<string, CommunityGroup>();
+
+    defaultGroups.forEach((group) => {
+      mergedGroups.set(group.id, group);
+    });
+
+    userGroups.forEach((group) => {
+      mergedGroups.set(group.id, group);
+    });
+
+    const nextGroups = Array.from(mergedGroups.values());
+
+    console.log('[MapScreen] MapScreen:loadGroups:mergedGroups', {
+      functionName: 'MapScreen:loadGroups',
+      ...mapScreenUserLogContext(user),
+      groupIds: nextGroups.map((group) => group.id),
+      userGroupIds: userGroups.map((group) => group.id),
+      defaultGroupIds: defaultGroups.map((group) => group.id),
+    });
+
+    return nextGroups;
+  }, [defaultGroups, user, userGroups]);
+
   useEffect(() => {
-    if (!groups.length) {
+    if (!user) {
+      setAlerts([]);
+      return undefined;
+    }
+
+    const memberGroupIds = groups
+      .filter((group) => group.members.includes(user.uid))
+      .map((group) => group.id);
+    const alertsQueryText = "query(alerts, where('groupId', 'in', groupIdsChunk))";
+
+    console.log('[MapScreen] MapScreen:loadAlerts:start', {
+      functionName: 'MapScreen:loadAlerts',
+      ...mapScreenUserLogContext(user),
+      query: memberGroupIds.length ? alertsQueryText : 'none; skipped because groupIds is empty',
+      groupIds: memberGroupIds,
+      allGroups: groups.map((group) => ({
+        id: group.id,
+        type: group.type,
+        isMember: group.members.includes(user.uid),
+      })),
+    });
+
+    if (!memberGroupIds.length) {
+      console.log('[MapScreen] MapScreen:loadAlerts:skip', {
+        functionName: 'MapScreen:loadAlerts',
+        ...mapScreenUserLogContext(user),
+        query: 'none; skipped because groupIds is empty',
+        groupIds: [],
+      });
       setAlerts([]);
       return undefined;
     }
 
     return subscribeAlertsForGroups(
-      groups.map((group) => group.id),
+      memberGroupIds,
       (nextAlerts) => {
+        console.log('[MapScreen] MapScreen:loadAlerts:success', {
+          functionName: 'MapScreen:loadAlerts',
+          ...mapScreenUserLogContext(user),
+          query: alertsQueryText,
+          groupIds: memberGroupIds,
+          alertCount: nextAlerts.length,
+        });
         setAlerts(nextAlerts);
         setError('');
       },
-      (alertsError) => setError(alertsError.message),
+      (alertsError) => {
+        logMapScreenError('MapScreen:loadAlerts', alertsError, user, alertsQueryText, memberGroupIds);
+        setError(`[MapScreen:loadAlerts] ${alertsError.message}`);
+      },
+      user.uid,
     );
-  }, [groups]);
+  }, [groups, user]);
 
   const userCoordinate = useMemo(() => getUserCoordinate(userLocation), [userLocation]);
   const mapAlerts = useMemo(
@@ -110,7 +277,7 @@ export function MapScreen({ navigation }: RootScreenProps<'Map'>) {
     [alerts, filter, userLocation],
   );
 
-  const centerCoordinate = userCoordinate ?? getAlertCoordinate(mapAlerts[0]) ?? [-70.6693, -33.4489];
+  const centerCoordinate = userCoordinate ?? getAlertCoordinate(mapAlerts[0]) ?? IQUIQUE_FALLBACK_COORDINATE;
   const selectedDistance = selectedAlert
     ? formatDistance(getAlertDistanceKm(selectedAlert, userLocation))
     : '';
@@ -152,7 +319,7 @@ export function MapScreen({ navigation }: RootScreenProps<'Map'>) {
       </View>
 
       <View style={styles.mapWrap}>
-        <MapView style={styles.map} styleURL={Mapbox.StyleURL.Light}>
+        <MapView style={styles.map} styleURL={mapboxConfig.styleURL}>
           <Camera
             ref={cameraRef}
             centerCoordinate={centerCoordinate}

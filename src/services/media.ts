@@ -1,4 +1,5 @@
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import * as FileSystem from 'expo-file-system/legacy';
+import { getDownloadURL, ref, uploadString } from 'firebase/storage';
 
 import { storage } from './firebase';
 
@@ -36,23 +37,35 @@ function getFileExtension(contentType?: string) {
   return 'jpg';
 }
 
+async function readMediaAsBase64(uri: string) {
+  if (uri.startsWith('data:')) {
+    const [, base64Payload] = uri.split(',');
+    if (!base64Payload) {
+      throw new Error('La imagen seleccionada no tiene datos validos.');
+    }
+
+    return base64Payload;
+  }
+
+  return FileSystem.readAsStringAsync(uri, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+}
+
 export async function uploadAlertMedia({
   uri,
   userId,
   contentType = 'image/jpeg',
 }: UploadAlertMediaInput) {
   const readyStorage = assertStorage();
-  const response = await fetch(uri);
-  const blob = await response.blob();
   const extension = getFileExtension(contentType);
   const mediaRef = ref(
     readyStorage,
     `alerts/${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`,
   );
+  const base64 = await readMediaAsBase64(uri);
 
-  await uploadBytes(mediaRef, blob, {
-    contentType,
-  });
+  await uploadString(mediaRef, base64, 'base64', { contentType });
 
   return getDownloadURL(mediaRef);
 }

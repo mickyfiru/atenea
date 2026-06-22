@@ -3,8 +3,6 @@ import { PropsWithChildren, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { subscribeAlertsForGroups } from '../services/alerts';
 import { subscribeUserGroups } from '../services/groups';
-import { registerExpoPushToken, sendLocalAlertNotification } from '../services/notifications';
-import { markAlertSoundHandled, wasAlertSoundHandled } from '../services/sounds';
 import { CommunityAlert } from '../types/domain';
 
 export function AlertSoundProvider({ children }: PropsWithChildren) {
@@ -25,7 +23,11 @@ export function AlertSoundProvider({ children }: PropsWithChildren) {
       return;
     }
 
-    void registerExpoPushToken(user.uid);
+    console.log('[ATENEA startup] Loading notifications after auth.');
+
+    void import('../services/notifications')
+      .then((notifications) => notifications.registerExpoPushToken(user.uid))
+      .catch((error) => console.warn('No se pudo cargar expo-notifications.', error));
   }, [user]);
 
   useEffect(() => {
@@ -76,13 +78,26 @@ export function AlertSoundProvider({ children }: PropsWithChildren) {
     newAlerts.forEach((alert) => seenAlertIdsRef.current.add(alert.id));
 
     newAlerts.slice(0, 3).forEach((alert) => {
-      if (wasAlertSoundHandled(alert.id)) {
+      void handleNewAlert(alert);
+    });
+  }
+
+  async function handleNewAlert(alert: CommunityAlert) {
+    try {
+      const [sounds, notifications] = await Promise.all([
+        import('../services/sounds'),
+        import('../services/notifications'),
+      ]);
+
+      if (sounds.wasAlertSoundHandled(alert.id)) {
         return;
       }
 
-      markAlertSoundHandled(alert.id);
-      void sendLocalAlertNotification(alert);
-    });
+      sounds.markAlertSoundHandled(alert.id);
+      await notifications.sendLocalAlertNotification(alert);
+    } catch (error) {
+      console.warn('No se pudo manejar la notificacion local de alerta.', error);
+    }
   }
 
   return <>{children}</>;

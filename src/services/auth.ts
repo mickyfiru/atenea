@@ -1,11 +1,15 @@
 import type { ApplicationVerifier, Auth, ConfirmationResult, UserCredential } from 'firebase/auth';
 import { FirebaseError } from 'firebase/app';
-import { signInWithPhoneNumber, signOut } from 'firebase/auth';
+import { signInAnonymously, signInWithPhoneNumber, signOut } from 'firebase/auth';
 
 import { auth, EXPECTED_FIREBASE_PROJECT_ID, isFirebaseConfigured } from './firebase';
 import { ensureUserDocument } from './users';
 
 const pendingConfirmations = new Map<string, ConfirmationResult>();
+const enableDevLoginFromEnv =
+  process.env.EXPO_PUBLIC_ENABLE_DEV_LOGIN?.toLowerCase() === 'true';
+
+export const isDevLoginEnabled = __DEV__ || enableDevLoginFromEnv;
 
 export function assertFirebaseAuthReady() {
   if (!isFirebaseConfigured || !auth) {
@@ -48,6 +52,12 @@ export async function startPhoneSignIn(
   const readyAuth = getReadyAuth();
   verifyFirebaseProject(readyAuth);
 
+  if (!verifier) {
+    throw new Error(
+      'Phone Auth en Android requiere un verificador nativo compatible. Usa el modo prueba temporal en esta APK.',
+    );
+  }
+
   const normalizedPhone = normalizePhoneNumber(phoneNumber);
   const confirmationResult = await signInWithPhoneNumber(readyAuth, normalizedPhone, verifier);
   const confirmationId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -55,6 +65,20 @@ export async function startPhoneSignIn(
   pendingConfirmations.set(confirmationId, confirmationResult);
 
   return confirmationId;
+}
+
+export async function startDevSignIn(): Promise<UserCredential> {
+  if (!isDevLoginEnabled) {
+    throw new Error('El modo prueba no esta habilitado para esta compilacion.');
+  }
+
+  const readyAuth = getReadyAuth();
+  verifyFirebaseProject(readyAuth);
+
+  const credential = await signInAnonymously(readyAuth);
+  await ensureUserDocument(credential.user);
+
+  return credential;
 }
 
 export async function verifyOtpCode(
@@ -98,7 +122,11 @@ export function getAuthErrorMessage(error: unknown) {
       case 'auth/invalid-app-credential':
         return 'No se pudo validar reCAPTCHA. Intenta nuevamente.';
       case 'auth/operation-not-allowed':
-        return 'Phone Authentication no esta habilitado en Firebase Auth.';
+        return 'El metodo de autenticacion no esta habilitado en Firebase Auth.';
+      case 'auth/admin-restricted-operation':
+        return 'Anonymous Auth no esta habilitado en Firebase. Activalo para usar el modo prueba.';
+      case 'auth/argument-error':
+        return 'Phone Auth necesita un verificador reCAPTCHA valido. En Android usa el modo prueba temporal.';
       case 'auth/network-request-failed':
         return 'No hay conexion con Firebase. Revisa tu internet e intenta nuevamente.';
       default:
