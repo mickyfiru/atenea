@@ -1,6 +1,6 @@
 import { deepSeekProvider } from './deepseekProvider';
 import { mockProvider } from './mockProvider';
-import { ollamaProvider } from './ollamaProvider';
+import { getOllamaConfig, ollamaProvider, testOllamaConnection } from './ollamaProvider';
 import {
   AIAssistantProvider,
   AIAssistantProviderName,
@@ -9,6 +9,7 @@ import {
 } from './types';
 
 export * from './types';
+export { testOllamaConnection };
 
 const providers: Record<AIAssistantProviderName, AIAssistantProvider> = {
   deepseek: deepSeekProvider,
@@ -98,6 +99,20 @@ export function getAIAssistantProvider() {
 
 export function getAIAssistantProviderLabel() {
   return resolveAIProvider().label;
+}
+
+export function getAIProviderDebugInfo(fallbackActive = false) {
+  const configuredProvider = getConfiguredProviderName();
+  const ollamaConfig = getOllamaConfig();
+
+  return {
+    configuredProvider,
+    effectiveProvider: fallbackActive ? 'mock' as const : configuredProvider,
+    ollamaBaseUrl: ollamaConfig.baseUrl,
+    ollamaModel: ollamaConfig.model,
+    deepseekBackendConfigured: Boolean(process.env.EXPO_PUBLIC_DEEPSEEK_BACKEND_URL),
+    mockFallbackAvailable: true,
+  };
 }
 
 export function sendMessage(prompt: string, context?: AIMessageContext) {

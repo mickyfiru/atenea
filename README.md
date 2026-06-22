@@ -1,5 +1,42 @@
 # ATENEA
 
+## Guia rapida para presentar Atenea
+
+Inicia Metro para la demo:
+
+```bash
+npx expo start --dev-client --tunnel --clear
+```
+
+Modo seguro recomendado:
+
+```bash
+EXPO_PUBLIC_ATENEA_AI_COMMAND_PROVIDER=mock
+```
+
+Modo Ollama opcional:
+
+```bash
+EXPO_PUBLIC_ATENEA_AI_COMMAND_PROVIDER=ollama
+EXPO_PUBLIC_OLLAMA_BASE_URL=http://IP_DE_MI_PC:11434/api/chat
+```
+
+Si cambias de Wi-Fi, la IP local de tu PC puede cambiar. Revisa la nueva IPv4 con:
+
+```powershell
+ipconfig
+```
+
+Comandos de demostracion:
+
+- `me robaron`
+- `hay taco`
+- `corte de luz`
+- `necesito ambulancia`
+- `llama a bomberos`
+- `abre grupos`
+- `muestrame el mapa`
+
 ## IA inicial
 
 ATENEA incluye una base modular de IA en `src/services/ai/`.
@@ -66,3 +103,58 @@ npx expo start --dev-client --tunnel --clear
 Si Ollama no responde, cambia la IP, tarda mas de 8 segundos, devuelve JSON invalido o falla la red, ATENEA muestra `IA: Ollama no disponible, usando Mock Demo` y sigue funcionando con mock.
 
 DeepSeek queda preparado solo mediante backend seguro o Firebase Function. La API key de DeepSeek no debe ir en el frontend.
+
+## Como probar Ollama local
+
+1. Revisa la IP de tu PC en Windows:
+
+```powershell
+ipconfig
+```
+
+2. Busca la IPv4 del adaptador Wi-Fi. Si cambias de Wi-Fi, esta IP puede cambiar.
+
+3. Configura `.env`:
+
+```bash
+EXPO_PUBLIC_ATENEA_AI_COMMAND_PROVIDER=ollama
+EXPO_PUBLIC_OLLAMA_BASE_URL=http://NUEVA_IP:11434/api/chat
+EXPO_PUBLIC_OLLAMA_MODEL=llama3.1
+EXPO_PUBLIC_DEEPSEEK_BACKEND_URL=
+```
+
+4. Inicia Ollama escuchando en la red:
+
+```powershell
+$env:OLLAMA_HOST="0.0.0.0:11434"
+ollama serve
+```
+
+5. En otra terminal prueba el modelo:
+
+```powershell
+ollama run llama3.1
+```
+
+6. Reinicia Metro:
+
+```bash
+npx expo start --dev-client --tunnel --clear
+```
+
+7. En la app abre Atenea IA, despliega `Estado IA` y toca `Probar Ollama`.
+
+Resultados esperados:
+
+- `Ollama conectado correctamente`: la app puede usar Ollama.
+- `URL Ollama no configurada`: falta `EXPO_PUBLIC_OLLAMA_BASE_URL`.
+- `Timeout conectando a Ollama`: IP, Wi-Fi, firewall u Ollama no disponible.
+- `Ollama no disponible, usando Mock Demo`: la app sigue funcionando con mock.
+
+Para una presentacion importante, deja:
+
+```bash
+EXPO_PUBLIC_ATENEA_AI_COMMAND_PROVIDER=mock
+```
+
+Asi la app no depende de Ollama ni de una IP local.

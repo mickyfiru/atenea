@@ -11,7 +11,9 @@ import {
   AIAssistantIntent,
   ParsedAlertCommand,
   getAIAssistantProviderLabel,
+  getAIProviderDebugInfo,
   sendMessage,
+  testOllamaConnection,
 } from '../services/ai/index';
 import {
   clearAICommandHistory,
@@ -58,6 +60,11 @@ function AIAssistantPanel({ onCreateAlertDraft, onIntent }, ref) {
   const [commandHistoryId, setCommandHistoryId] = useState<string>();
   const [history, setHistory] = useState<AICommandHistoryEntry[]>([]);
   const [providerLabel, setProviderLabel] = useState(getAIAssistantProviderLabel());
+  const [fallbackActive, setFallbackActive] = useState(false);
+  const [aiStatusVisible, setAiStatusVisible] = useState(false);
+  const [ollamaTestMessage, setOllamaTestMessage] = useState('');
+  const [ollamaTestOk, setOllamaTestOk] = useState<boolean | undefined>();
+  const [testingOllama, setTestingOllama] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -99,6 +106,7 @@ function AIAssistantPanel({ onCreateAlertDraft, onIntent }, ref) {
       let nextHistory = await saveAICommandHistory(historyEntry);
 
       setResponse(nextResponse.text);
+      setFallbackActive(Boolean(nextResponse.fallbackUsed));
       setProviderLabel(nextResponse.providerLabel ?? getAIAssistantProviderLabel());
       setCommandPreview(nextCommand);
       setCommandHistoryId(historyEntry.id);
@@ -153,6 +161,7 @@ function AIAssistantPanel({ onCreateAlertDraft, onIntent }, ref) {
       setCommandPreview(undefined);
       setCommandHistoryId(historyEntry.id);
       setHistory(nextHistory);
+      setFallbackActive(false);
       setProviderLabel(getAIAssistantProviderLabel());
       setResponse(nextResponse);
       await speak(spokenResponse);
@@ -183,6 +192,25 @@ function AIAssistantPanel({ onCreateAlertDraft, onIntent }, ref) {
   async function handleClearHistory() {
     await clearAICommandHistory();
     setHistory([]);
+  }
+
+  async function handleTestOllama() {
+    setTestingOllama(true);
+    setOllamaTestMessage('');
+    setOllamaTestOk(undefined);
+
+    try {
+      const result = await testOllamaConnection();
+      setOllamaTestOk(result.ok);
+      setOllamaTestMessage(result.message);
+
+      if (!result.ok) {
+        setFallbackActive(true);
+        setProviderLabel('IA: Ollama no disponible, usando Mock Demo');
+      }
+    } finally {
+      setTestingOllama(false);
+    }
   }
 
   async function handleEmergencyOption(
@@ -221,6 +249,7 @@ function AIAssistantPanel({ onCreateAlertDraft, onIntent }, ref) {
   const emergency = getEmergencyDisplay(commandPreview);
   const statusText = getVoiceStatusText(voice.listening, voice.processing);
   const visibleError = error || voice.error;
+  const debugInfo = getAIProviderDebugInfo(fallbackActive);
 
   return (
     <View style={styles.card}>
@@ -230,6 +259,54 @@ function AIAssistantPanel({ onCreateAlertDraft, onIntent }, ref) {
           <Text style={styles.title}>Atenea IA</Text>
         </View>
         <Text style={styles.badge}>{providerLabel}</Text>
+      </View>
+
+      <View style={styles.aiStatusSection}>
+        <Pressable
+          onPress={() => setAiStatusVisible((visible) => !visible)}
+          style={styles.aiStatusHeader}
+        >
+          <Text style={styles.aiStatusTitle}>Estado IA</Text>
+          <Ionicons
+            name={aiStatusVisible ? 'chevron-up-outline' : 'chevron-down-outline'}
+            size={18}
+            color={colors.muted}
+          />
+        </Pressable>
+
+        {aiStatusVisible ? (
+          <View style={styles.aiStatusBody}>
+            <Text style={styles.aiStatusText}>
+              Proveedor configurado: {debugInfo.configuredProvider}
+            </Text>
+            <Text style={styles.aiStatusText}>
+              Proveedor activo: {debugInfo.effectiveProvider}
+            </Text>
+            <Text numberOfLines={1} style={styles.aiStatusText}>
+              URL Ollama: {debugInfo.ollamaBaseUrl || 'no configurada'}
+            </Text>
+            <Text style={styles.aiStatusText}>Modelo Ollama: {debugInfo.ollamaModel}</Text>
+            <Text style={styles.aiStatusText}>
+              Estado: {getAIStatusLabel(ollamaTestOk, fallbackActive)}
+            </Text>
+            <PrimaryButton
+              disabled={testingOllama}
+              label={testingOllama ? 'Probando...' : 'Probar Ollama'}
+              onPress={handleTestOllama}
+              style={styles.testOllamaButton}
+              variant="light"
+            />
+            {ollamaTestMessage ? (
+              <Text style={[
+                styles.aiStatusResult,
+                { color: ollamaTestOk ? colors.success : colors.warning },
+              ]}
+              >
+                {ollamaTestMessage}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.inputRow}>
@@ -549,6 +626,22 @@ function formatOrigin(origin: AICommandOrigin) {
   }
 }
 
+function getAIStatusLabel(testOk: boolean | undefined, fallbackActive: boolean) {
+  if (testOk) {
+    return 'conectado';
+  }
+
+  if (fallbackActive) {
+    return 'usando mock fallback';
+  }
+
+  if (testOk === false) {
+    return 'no conectado';
+  }
+
+  return 'sin probar';
+}
+
 function formatHistoryTime(createdAt: string) {
   return new Intl.DateTimeFormat('es-CL', {
     hour: '2-digit',
@@ -676,6 +769,44 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     textAlign: 'right',
+  },
+  aiStatusSection: {
+    backgroundColor: colors.background,
+    borderColor: colors.line,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  aiStatusHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 42,
+    paddingHorizontal: 12,
+  },
+  aiStatusTitle: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  aiStatusBody: {
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
+    gap: 7,
+    padding: 12,
+  },
+  aiStatusText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  aiStatusResult: {
+    fontSize: 12,
+    fontWeight: '900',
+    lineHeight: 17,
+  },
+  testOllamaButton: {
+    minHeight: 42,
   },
   inputRow: {
     alignItems: 'center',

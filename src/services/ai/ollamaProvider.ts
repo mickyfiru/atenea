@@ -2,6 +2,7 @@ import { AlertCategory } from '../../types/domain';
 import { AIAssistantProvider, EmergencyGroupId, ParsedAlertCommand } from './types';
 
 const OLLAMA_TIMEOUT_MS = 8000;
+const OLLAMA_TEST_TIMEOUT_MS = 5000;
 const ollamaBaseUrl = process.env.EXPO_PUBLIC_OLLAMA_BASE_URL;
 const ollamaModel = process.env.EXPO_PUBLIC_OLLAMA_MODEL ?? 'llama3.1';
 
@@ -95,6 +96,100 @@ async function sendOllamaPrompt(prompt: string) {
   }
 
   return content;
+}
+
+async function sendOllamaTestPrompt() {
+  if (!ollamaBaseUrl) {
+    throw new Error('URL Ollama no configurada.');
+  }
+
+  const controller = new AbortController();
+  const response = await withTimeout(
+    fetch(ollamaBaseUrl, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: ollamaModel,
+        stream: false,
+        format: 'json',
+        messages: [
+          {
+            role: 'system',
+            content: 'Responde SOLO JSON valido con esta forma: {"ok":true,"message":"pong"}',
+          },
+          {
+            role: 'user',
+            content: 'ping',
+          },
+        ],
+      }),
+    }),
+    OLLAMA_TEST_TIMEOUT_MS,
+    () => controller.abort(),
+  );
+
+  if (!response.ok) {
+    throw new Error(`Ollama respondio con HTTP ${response.status}.`);
+  }
+
+  const data = await response.json() as { message?: { content?: string } };
+
+  if (!data.message?.content) {
+    throw new Error('Ollama respondio sin contenido.');
+  }
+
+  JSON.parse(extractJson(data.message.content));
+}
+
+export async function testOllamaConnection() {
+  const baseUrl = ollamaBaseUrl ?? '';
+
+  if (!baseUrl) {
+    return {
+      ok: false,
+      provider: 'ollama' as const,
+      baseUrl,
+      model: ollamaModel,
+      message: 'URL Ollama no configurada',
+      error: 'EXPO_PUBLIC_OLLAMA_BASE_URL no esta configurado.',
+    };
+  }
+
+  try {
+    await sendOllamaTestPrompt();
+
+    return {
+      ok: true,
+      provider: 'ollama' as const,
+      baseUrl,
+      model: ollamaModel,
+      message: 'Ollama conectado correctamente',
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const isTimeout = message.toLowerCase().includes('tardo') || message.toLowerCase().includes('abort');
+
+    console.warn('[Atenea IA] Test Ollama fall\u00f3, usando mock fallback.', error);
+
+    return {
+      ok: false,
+      provider: 'ollama' as const,
+      baseUrl,
+      model: ollamaModel,
+      message: isTimeout ? 'Timeout conectando a Ollama' : 'Ollama no disponible, usando Mock Demo',
+      error: message,
+    };
+  }
+}
+
+export function getOllamaConfig() {
+  return {
+    baseUrl: ollamaBaseUrl ?? '',
+    model: ollamaModel,
+  };
 }
 
 function normalizeString(value: unknown) {
