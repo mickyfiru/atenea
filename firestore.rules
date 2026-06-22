@@ -54,8 +54,17 @@ service cloud.firestore {
         request.auth.uid in get(groupPath(groupId)).data.members;
     }
 
+    function isGroupMemberResource() {
+      return isSignedIn() &&
+        request.auth.uid in resource.data.members;
+    }
+
     function isDefaultEmergencyGroup(groupId) {
       return groupId in ['default-firefighters', 'default-police', 'default-ambulance'];
+    }
+
+    function isPublicEmergencyGroup() {
+      return resource.data.type == 'emergency';
     }
 
     function validUserDocument(userId) {
@@ -174,15 +183,17 @@ service cloud.firestore {
     }
 
     match /groups/{groupId} {
-      allow read: if isSignedIn() && (
-        isGroupMember(groupId) ||
-        isDefaultEmergencyGroup(groupId)
+      allow get: if isSignedIn() && (
+        isGroupMemberResource() ||
+        isDefaultEmergencyGroup(groupId) ||
+        isPublicEmergencyGroup()
       );
+      allow list: if isGroupMemberResource();
       allow create: if isSignedIn() && validGroupDocument(groupId);
       allow update: if isSignedIn() && (
-        (isGroupMember(groupId) && isUpdatingGroupActivity()) ||
+        (isGroupMemberResource() && isUpdatingGroupActivity()) ||
         isJoiningSelf() ||
-        (isGroupMember(groupId) && isUpdatingOwnCreatedGroupId(groupId))
+        (isGroupMemberResource() && isUpdatingOwnCreatedGroupId(groupId))
       );
       allow delete: if false;
     }

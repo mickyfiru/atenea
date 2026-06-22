@@ -114,6 +114,24 @@ function logGroupError(
   });
 }
 
+function logGroupWarning(
+  event: string,
+  userId: string | undefined,
+  error: unknown,
+  details: FirestoreDebugDetails = {},
+) {
+  const firebaseError = error as Partial<FirebaseErrorLike>;
+
+  console.warn(`[groups] ${event}`, {
+    ...groupLogContext(userId),
+    functionName: details.functionName ?? event,
+    query: details.query ?? '',
+    groupIds: details.groupIds ?? [],
+    'error.code': firebaseError.code ?? 'unknown',
+    'error.message': firebaseError.message ?? String(error),
+  });
+}
+
 function groupStyle(group: Pick<CommunityGroup, 'id' | 'type'> & { name: string }) {
   if (group.id === 'default-police') {
     return {
@@ -334,6 +352,16 @@ export function subscribeUserGroups(
       onGroups(nextGroups);
     },
     (error) => {
+      if ((error as FirebaseErrorLike).code === 'permission-denied') {
+        logGroupWarning('subscribeUserGroups permission-denied fallback []', userId, error, {
+          functionName: 'subscribeUserGroups',
+          query: groupMembershipQuery,
+          groupIds: [],
+        });
+        onGroups([]);
+        return;
+      }
+
       logGroupError('subscribeUserGroups:error', userId, error, {
         functionName: 'subscribeUserGroups',
         query: groupMembershipQuery,
